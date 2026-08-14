@@ -1,7 +1,9 @@
-use std::{io, net::SocketAddr};
+use std::io;
 
 use axum::{Json, Router, extract::ws::WebSocketUpgrade, response::IntoResponse, routing::get};
 use cipher_types::ServiceStatus;
+
+use crate::config::ServerConfig;
 
 pub mod config;
 
@@ -12,9 +14,14 @@ pub fn app() -> Router {
         .route("/v1/realtime", get(realtime))
 }
 
-pub async fn run(bind: SocketAddr) -> io::Result<()> {
-    let listener = tokio::net::TcpListener::bind(bind).await?;
-    tracing::info!(%bind, "Cipher backend listening");
+pub async fn run(config: ServerConfig) -> io::Result<()> {
+    let listener = tokio::net::TcpListener::bind(config.bind).await?;
+    tracing::info!(
+        bind = %config.bind,
+        region = %config.aws.region,
+        api_origin = %config.endpoints.api_origin,
+        "Cipher backend listening"
+    );
     axum::serve(listener, app()).await
 }
 

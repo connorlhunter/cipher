@@ -1,5 +1,10 @@
 [workspace]
-members = ["apps/cipher-server", "crates/cipher-types", "src-tauri"]
+members = [
+  "apps/cipher-server",
+  "crates/cipher-test-support",
+  "crates/cipher-types",
+  "src-tauri",
+]
 resolver = "3"
 
 [workspace.package]

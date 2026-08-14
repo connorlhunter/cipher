@@ -49,3 +49,17 @@ jobs:
       - run: cargo test --workspace --locked
       - run: cargo build --workspace --release --locked
       - run: bun run desktop:build
+
+  infrastructure:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - run: npm --prefix infra ci --ignore-scripts
+      - run: npm --prefix infra audit --audit-level=high
+      - run: npm --prefix infra run typecheck
+      - run: CDK_DEFAULT_ACCOUNT=629577972102 CIPHER_AWS_REGION=us-east-1 npm --prefix infra run synth

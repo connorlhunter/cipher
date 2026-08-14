@@ -11,5 +11,5 @@ async fn main() -> std::io::Result<()> {
     });
 
     tracing::info!("Cipher server configured");
-    cipher_server::run(config.bind).await
+    cipher_server::run(config).await
 }
