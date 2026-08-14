@@ -33,7 +33,9 @@
     "test:rust": "cargo test --workspace --locked",
     "toolchain:check": "bun scripts/check-toolchain.ts",
     "typecheck": "bun x tsgo --build --pretty false && npm --prefix infra run typecheck",
-    "verify": "bun run toolchain:check && bun run audit && bun run format:check && bun run lint && bun run typecheck && bun run test && bun run web:build",
+    "version:check": "bun scripts/release-version.ts --check",
+    "version:sync": "bun scripts/release-version.ts",
+    "verify": "bun run version:check && bun run toolchain:check && bun run audit && bun run format:check && bun run lint && bun run typecheck && bun run test && bun run web:build",
     "web:build": "vite build",
     "web:dev": "vite"
   },
