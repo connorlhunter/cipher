@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { loadInfrastructureConfig } from "../config/environment";
 import {
   runReadinessCheck,
   type CommandRunner,
@@ -7,6 +8,13 @@ import {
 } from "../scripts/infra-readiness";
 
 const accountId = "123456789012";
+const config = loadInfrastructureConfig({
+  CIPHER_AWS_REGION: "us-east-1",
+  CIPHER_STATE_STACK: "CipherProductionState",
+  CIPHER_CONTROL_STACK: "CipherProductionControl",
+  CIPHER_NETWORK_STACK: "CipherProductionNetwork",
+  CIPHER_RUNTIME_STACK: "CipherProductionRuntime",
+});
 
 const completeTemplates: Record<string, unknown> = {
   "infra/cdk.out/CipherProductionState.template.json": {
@@ -86,11 +94,13 @@ describe("infrastructure readiness", () => {
   test("passes only when account, bootstrap, synthesis, and stack shape are ready", async () => {
     const { calls, runner } = createRunner();
 
-    await expect(runReadinessCheck({ accountId }, runner, createReader())).resolves.toEqual([
-      "AWS account 123456789012 and us-east-1 are ready.",
-      "CDK bootstrap is ready.",
-      "All required Cipher stack resources are present in the synthesized templates.",
-    ]);
+    await expect(runReadinessCheck({ accountId }, runner, createReader(), config)).resolves.toEqual(
+      [
+        "AWS account 123456789012 and us-east-1 are ready.",
+        "CDK bootstrap is ready.",
+        "All required Cipher stack resources are present in the synthesized templates.",
+      ],
+    );
 
     expect(calls.map((command) => command.slice(0, 3))).toEqual([
       ["aws", "sts", "get-caller-identity"],
@@ -102,7 +112,7 @@ describe("infrastructure readiness", () => {
   test("stops before synthesis when the active account is wrong", async () => {
     const { calls, runner } = createRunner({ account: "000000000000" });
 
-    await expect(runReadinessCheck({ accountId }, runner, createReader())).rejects.toThrow(
+    await expect(runReadinessCheck({ accountId }, runner, createReader(), config)).rejects.toThrow(
       "active AWS account is not Cipher production",
     );
     expect(calls).toHaveLength(1);
@@ -111,7 +121,7 @@ describe("infrastructure readiness", () => {
   test("stops before synthesis when CDK bootstrap is not ready", async () => {
     const { calls, runner } = createRunner({ bootstrapStatus: "UPDATE_IN_PROGRESS" });
 
-    await expect(runReadinessCheck({ accountId }, runner, createReader())).rejects.toThrow(
+    await expect(runReadinessCheck({ accountId }, runner, createReader(), config)).rejects.toThrow(
       "CDK bootstrap stack is not ready",
     );
     expect(calls).toHaveLength(2);
@@ -120,7 +130,7 @@ describe("infrastructure readiness", () => {
   test("requires termination protection on CDK bootstrap", async () => {
     const { runner } = createRunner({ bootstrapProtection: false });
 
-    await expect(runReadinessCheck({ accountId }, runner, createReader())).rejects.toThrow(
+    await expect(runReadinessCheck({ accountId }, runner, createReader(), config)).rejects.toThrow(
       "CDK bootstrap stack must have termination protection enabled",
     );
   });
@@ -134,7 +144,7 @@ describe("infrastructure readiness", () => {
     const { runner } = createRunner();
 
     await expect(
-      runReadinessCheck({ accountId }, runner, createReader(incompleteTemplates)),
+      runReadinessCheck({ accountId }, runner, createReader(incompleteTemplates), config),
     ).rejects.toThrow("CipherProductionRuntime is not ready. Missing: AWS::ECS::Service.");
   });
 });

@@ -392,8 +392,6 @@ dependencies = [
  "axum",
  "cipher-types",
  "http-body-util",
- "serde",
- "serde_json",
  "tokio",
  "tower",
  "tracing",

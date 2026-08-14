@@ -1,12 +1,4 @@
-import { productionConfig } from "../config/production";
-
-const productionRegion = productionConfig.awsRegion;
-const stateStack = productionConfig.stacks.state;
-const controlStack = productionConfig.stacks.control;
-const networkStack = productionConfig.stacks.network;
-const runtimeStack = productionConfig.stacks.runtime;
-const persistentStacks = [stateStack, controlStack];
-const disposableStacks = [runtimeStack, networkStack];
+import { type InfrastructureConfig, loadInfrastructureConfig } from "../config/environment";
 
 /**
  * Infrastructure lifecycle actions supported by the production control script.
@@ -103,9 +95,15 @@ function cdkCommand(...args: string[]): string[] {
 
 /**
  * @param action - Infrastructure lifecycle action to plan.
+ * @param config - Validated deployment configuration.
  * @returns The complete ordered command plan for the action.
  */
-export function plannedCommands(action: InfrastructureAction): string[][] {
+export function plannedCommands(
+  action: InfrastructureAction,
+  config: InfrastructureConfig,
+): string[][] {
+  const persistentStacks = [config.stacks.state, config.stacks.control];
+  const disposableStacks = [config.stacks.runtime, config.stacks.network];
   switch (action) {
     case "pause":
       return disposableStacks.map((stack) => cdkCommand("destroy", stack, "--force"));
@@ -113,10 +111,10 @@ export function plannedCommands(action: InfrastructureAction): string[][] {
       return [
         cdkCommand(
           "deploy",
-          stateStack,
-          controlStack,
-          networkStack,
-          runtimeStack,
+          config.stacks.state,
+          config.stacks.control,
+          config.stacks.network,
+          config.stacks.runtime,
           "--require-approval",
           "never",
         ),
@@ -153,14 +151,18 @@ function accountId(environment: InfrastructureEnvironment): string {
  * @param expectedAccount - Expected production AWS account identifier.
  * @returns The action-specific confirmation phrase.
  */
-function confirmationFor(action: InfrastructureAction, expectedAccount: string): string {
+function confirmationFor(
+  action: InfrastructureAction,
+  expectedAccount: string,
+  config: InfrastructureConfig,
+): string {
   switch (action) {
     case "pause":
-      return `PAUSE-CIPHER-PRODUCTION-${expectedAccount}-${productionRegion}`;
+      return `PAUSE-CIPHER-PRODUCTION-${expectedAccount}-${config.awsRegion}`;
     case "resume":
-      return `RESUME-CIPHER-PRODUCTION-${expectedAccount}-${productionRegion}`;
+      return `RESUME-CIPHER-PRODUCTION-${expectedAccount}-${config.awsRegion}`;
     case "destroy-all":
-      return `UNLOCK-CIPHER-PRODUCTION-${expectedAccount}-${productionRegion}`;
+      return `UNLOCK-CIPHER-PRODUCTION-${expectedAccount}-${config.awsRegion}`;
   }
 }
 
@@ -168,15 +170,15 @@ function confirmationFor(action: InfrastructureAction, expectedAccount: string):
  * @param expectedAccount - Expected production AWS account identifier.
  * @returns The additional irreversible-destruction confirmation phrase.
  */
-function destroyConfirmationFor(expectedAccount: string): string {
-  return `DESTROY-CIPHER-PRODUCTION-AND-ALL-DATA-${expectedAccount}-${productionRegion}`;
+function destroyConfirmationFor(expectedAccount: string, config: InfrastructureConfig): string {
+  return `DESTROY-CIPHER-PRODUCTION-AND-ALL-DATA-${expectedAccount}-${config.awsRegion}`;
 }
 
 /**
  * @param runner - Command runner used to query AWS.
  * @returns The active AWS account identifier.
  */
-function currentAccount(runner: CommandRunner): string {
+function currentAccount(runner: CommandRunner, config: InfrastructureConfig): string {
   const result = runner.run([
     "aws",
     "sts",
@@ -186,7 +188,7 @@ function currentAccount(runner: CommandRunner): string {
     "--output",
     "text",
     "--region",
-    productionRegion,
+    config.awsRegion,
   ]);
   if (result.exitCode !== 0) {
     throw new Error("Could not verify the active AWS account before changing infrastructure.");
@@ -202,13 +204,14 @@ function currentAccount(runner: CommandRunner): string {
 function assertProductionTarget(
   environment: InfrastructureEnvironment,
   runner: CommandRunner,
+  config: InfrastructureConfig,
 ): string {
   const expectedAccount = accountId(environment);
   const isInteractive = environment.isInteractive ?? (process.stdin.isTTY && process.stdout.isTTY);
   if (!isInteractive) {
     throw new Error("Refusing to change infrastructure outside an interactive terminal.");
   }
-  if (currentAccount(runner) !== expectedAccount) {
+  if (currentAccount(runner, config) !== expectedAccount) {
     throw new Error("The active AWS account is not Cipher production. No changes were made.");
   }
   return expectedAccount;
@@ -219,7 +222,7 @@ function assertProductionTarget(
  * @param runner - Command runner used to query AWS.
  * @returns Whether the named stack currently exists.
  */
-function stackExists(stack: string, runner: CommandRunner): boolean {
+function stackExists(stack: string, runner: CommandRunner, config: InfrastructureConfig): boolean {
   const result = runner.run([
     "aws",
     "cloudformation",
@@ -227,7 +230,7 @@ function stackExists(stack: string, runner: CommandRunner): boolean {
     "--stack-name",
     stack,
     "--region",
-    productionRegion,
+    config.awsRegion,
   ]);
   if (result.exitCode === 0) {
     return true;
@@ -243,20 +246,26 @@ function stackExists(stack: string, runner: CommandRunner): boolean {
  * @param runner - Command runner used to query AWS.
  * @returns Commands that still need to run for the action.
  */
-function existingCommands(action: InfrastructureAction, runner: CommandRunner): string[][] {
+function existingCommands(
+  action: InfrastructureAction,
+  runner: CommandRunner,
+  config: InfrastructureConfig,
+): string[][] {
+  const persistentStacks = [config.stacks.state, config.stacks.control];
+  const disposableStacks = [config.stacks.runtime, config.stacks.network];
   switch (action) {
     case "pause":
       return disposableStacks
-        .filter((stack) => stackExists(stack, runner))
+        .filter((stack) => stackExists(stack, runner, config))
         .map((stack) => cdkCommand("destroy", stack, "--force"));
     case "resume":
-      return plannedCommands(action);
+      return plannedCommands(action, config);
     case "destroy-all": {
       const existingPersistentStacks = persistentStacks.filter((stack) =>
-        stackExists(stack, runner),
+        stackExists(stack, runner, config),
       );
       const existingDisposableStacks = disposableStacks.filter((stack) =>
-        stackExists(stack, runner),
+        stackExists(stack, runner, config),
       );
       if (existingPersistentStacks.length === 0 && existingDisposableStacks.length === 0) {
         return [];
@@ -299,21 +308,23 @@ function runCommand(command: string[], runner: CommandRunner): void {
  * @param args - Command-line arguments describing the action and confirmations.
  * @param environment - Expected production environment and terminal state.
  * @param runner - Command runner used for AWS and CDK operations.
+ * @param config - Validated deployment configuration.
  * @returns Display-ready commands that were planned or completed.
  */
 export function runInfrastructureControl(
   args: string[],
   environment: InfrastructureEnvironment,
   runner: CommandRunner,
+  config: InfrastructureConfig,
 ): string[] {
   const { action, confirmation, destroyConfirmation, dryRun } = parseArguments(args);
   const expectedAccount = accountId(environment);
-  const expectedConfirmation = confirmationFor(action, expectedAccount);
+  const expectedConfirmation = confirmationFor(action, expectedAccount, config);
   if (confirmation !== expectedConfirmation) {
     throw new Error(`Refusing ${action}: pass --confirm=${expectedConfirmation}.`);
   }
   if (action === "destroy-all") {
-    const expectedDestroyConfirmation = destroyConfirmationFor(expectedAccount);
+    const expectedDestroyConfirmation = destroyConfirmationFor(expectedAccount, config);
     if (destroyConfirmation !== expectedDestroyConfirmation) {
       throw new Error(
         `Refusing destroy-all: pass --destroy-confirm=${expectedDestroyConfirmation}.`,
@@ -322,11 +333,11 @@ export function runInfrastructureControl(
   }
 
   if (dryRun) {
-    return plannedCommands(action).map((command) => command.join(" "));
+    return plannedCommands(action, config).map((command) => command.join(" "));
   }
 
-  assertProductionTarget(environment, runner);
-  const commands = existingCommands(action, runner);
+  assertProductionTarget(environment, runner, config);
+  const commands = existingCommands(action, runner, config);
   for (const command of commands) {
     runCommand(command, runner);
   }
@@ -351,10 +362,12 @@ function completionNote(action: InfrastructureAction): string {
 
 if (import.meta.main) {
   const parsed = parseArguments(Bun.argv.slice(2));
+  const config = loadInfrastructureConfig(process.env as Record<string, string | undefined>);
   const commands = runInfrastructureControl(
     Bun.argv.slice(2),
     { accountId: process.env.CIPHER_AWS_ACCOUNT_ID },
     liveRunner,
+    config,
   );
 
   if (commands.length === 0) {

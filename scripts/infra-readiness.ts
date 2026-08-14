@@ -1,6 +1,5 @@
-import { productionConfig } from "../config/production";
+import { type InfrastructureConfig, loadInfrastructureConfig } from "../config/environment";
 
-const productionRegion = productionConfig.awsRegion;
 const bootstrapStack = "CDKToolkit";
 
 /**
@@ -37,19 +36,18 @@ export interface ReadinessEnvironment {
 
 /**
  * Resource types required in each synthesized production stack.
+ *
+ * @param config - Validated deployment configuration.
+ * @returns Required CloudFormation resource types by stack.
  */
-const requiredResources = new Map<string, ReadonlyArray<string>>([
-  [
-    productionConfig.stacks.state,
-    ["AWS::Cognito::UserPool", "AWS::DynamoDB::Table", "AWS::S3::Bucket"],
-  ],
-  [productionConfig.stacks.control, ["AWS::ECR::Repository", "AWS::IAM::Role"]],
-  [productionConfig.stacks.network, ["AWS::EC2::VPC"]],
-  [
-    productionConfig.stacks.runtime,
-    ["AWS::ElasticLoadBalancingV2::LoadBalancer", "AWS::ECS::Service"],
-  ],
-]);
+function requiredResources(config: InfrastructureConfig): Map<string, ReadonlyArray<string>> {
+  return new Map<string, ReadonlyArray<string>>([
+    [config.stacks.state, ["AWS::Cognito::UserPool", "AWS::DynamoDB::Table", "AWS::S3::Bucket"]],
+    [config.stacks.control, ["AWS::ECR::Repository", "AWS::IAM::Role"]],
+    [config.stacks.network, ["AWS::EC2::VPC"]],
+    [config.stacks.runtime, ["AWS::ElasticLoadBalancingV2::LoadBalancer", "AWS::ECS::Service"]],
+  ]);
+}
 
 const liveRunner: CommandRunner = {
   run(command) {
@@ -102,7 +100,11 @@ function run(command: string[], runner: CommandRunner, failure: string): Command
  * @param runner - Command runner used to query AWS.
  * @returns Nothing; throws when the active account differs.
  */
-function assertActiveAccount(expected: string, runner: CommandRunner): void {
+function assertActiveAccount(
+  expected: string,
+  runner: CommandRunner,
+  config: InfrastructureConfig,
+): void {
   const result = run(
     [
       "aws",
@@ -113,7 +115,7 @@ function assertActiveAccount(expected: string, runner: CommandRunner): void {
       "--output",
       "text",
       "--region",
-      productionRegion,
+      config.awsRegion,
     ],
     runner,
     "Could not verify the active AWS account.",
@@ -127,7 +129,7 @@ function assertActiveAccount(expected: string, runner: CommandRunner): void {
  * @param runner - Command runner used to inspect the CDK bootstrap stack.
  * @returns Nothing; throws when bootstrap is absent, changing, or unprotected.
  */
-function assertBootstrapReady(runner: CommandRunner): void {
+function assertBootstrapReady(runner: CommandRunner, config: InfrastructureConfig): void {
   const result = run(
     [
       "aws",
@@ -136,12 +138,12 @@ function assertBootstrapReady(runner: CommandRunner): void {
       "--stack-name",
       bootstrapStack,
       "--region",
-      productionRegion,
+      config.awsRegion,
       "--output",
       "json",
     ],
     runner,
-    `CDK is not bootstrapped in ${productionRegion}. Run CDK bootstrap before deploying Cipher.`,
+    `CDK is not bootstrapped in ${config.awsRegion}. Run CDK bootstrap before deploying Cipher.`,
   );
 
   let stack: { EnableTerminationProtection?: unknown; StackStatus?: unknown } | undefined;
@@ -167,11 +169,11 @@ function assertBootstrapReady(runner: CommandRunner): void {
  * @param runner - Command runner used to synthesize the infrastructure.
  * @returns Nothing; restores the caller's environment after synthesis.
  */
-function synthesize(expected: string, runner: CommandRunner): void {
+function synthesize(expected: string, runner: CommandRunner, config: InfrastructureConfig): void {
   const originalAccount = process.env.CDK_DEFAULT_ACCOUNT;
   const originalRegion = process.env.CIPHER_AWS_REGION;
   process.env.CDK_DEFAULT_ACCOUNT = expected;
-  process.env.CIPHER_AWS_REGION = productionRegion;
+  process.env.CIPHER_AWS_REGION = config.awsRegion;
   try {
     run(
       ["npm", "--prefix", "infra", "exec", "cdk", "--", "synth"],
@@ -221,8 +223,11 @@ function resourceTypes(template: unknown): Set<string> {
  * @param reader - Reader for synthesized CloudFormation templates.
  * @returns Nothing; throws when a required stack resource is absent.
  */
-async function assertStackShape(reader: TemplateReader): Promise<void> {
-  for (const [stack, requirements] of requiredResources) {
+async function assertStackShape(
+  reader: TemplateReader,
+  config: InfrastructureConfig,
+): Promise<void> {
+  for (const [stack, requirements] of requiredResources(config)) {
     const types = resourceTypes(await reader.read(`infra/cdk.out/${stack}.template.json`));
     const missing = requirements.filter((requirement) => !types.has(requirement));
     if (missing.length > 0) {
@@ -237,21 +242,23 @@ async function assertStackShape(reader: TemplateReader): Promise<void> {
  * @param environment - Expected production environment.
  * @param runner - Command runner used for AWS and CDK operations.
  * @param reader - Reader for synthesized CloudFormation templates.
+ * @param config - Validated deployment configuration.
  * @returns Display-ready readiness results.
  */
 export async function runReadinessCheck(
   environment: ReadinessEnvironment,
   runner: CommandRunner,
   reader: TemplateReader,
+  config: InfrastructureConfig,
 ): Promise<string[]> {
   const account = expectedAccount(environment);
-  assertActiveAccount(account, runner);
-  assertBootstrapReady(runner);
-  synthesize(account, runner);
-  await assertStackShape(reader);
+  assertActiveAccount(account, runner, config);
+  assertBootstrapReady(runner, config);
+  synthesize(account, runner, config);
+  await assertStackShape(reader, config);
 
   return [
-    `AWS account ${account} and ${productionRegion} are ready.`,
+    `AWS account ${account} and ${config.awsRegion} are ready.`,
     "CDK bootstrap is ready.",
     "All required Cipher stack resources are present in the synthesized templates.",
   ];
@@ -259,10 +266,12 @@ export async function runReadinessCheck(
 
 if (import.meta.main) {
   try {
+    const config = loadInfrastructureConfig(process.env as Record<string, string | undefined>);
     const results = await runReadinessCheck(
       { accountId: process.env.CIPHER_AWS_ACCOUNT_ID },
       liveRunner,
       liveTemplateReader,
+      config,
     );
     console.log("Ready for deployment:");
     for (const result of results) {

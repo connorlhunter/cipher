@@ -2,10 +2,6 @@
 
 use std::{collections::HashSet, fmt, net::SocketAddr};
 
-use serde::Deserialize;
-
-const PRODUCTION_CONFIG_JSON: &str = include_str!("../../../config/production.json");
-
 /// Environment variables required to start the server.
 pub const REQUIRED_KEYS: [&str; 12] = [
     "CIPHER_SERVER_BIND",
@@ -72,14 +68,6 @@ pub struct ConfigError {
     reason: &'static str,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ProductionBoundary {
-    aws_region: String,
-    api_origin: String,
-    realtime_url: String,
-}
-
 impl ConfigError {
     fn new(key: &'static str, reason: &'static str) -> Self {
         Self { key, reason }
@@ -103,7 +91,6 @@ impl ServerConfig {
     }
 
     fn from_lookup(mut lookup: impl FnMut(&str) -> Option<String>) -> Result<Self, ConfigError> {
-        let production = production_boundary()?;
         let bind = required(&mut lookup, "CIPHER_SERVER_BIND")?
             .parse::<SocketAddr>()
             .map_err(|_| ConfigError::new("CIPHER_SERVER_BIND", "must be a socket address"))?;
@@ -115,12 +102,12 @@ impl ServerConfig {
         }
 
         let region = required(&mut lookup, "CIPHER_AWS_REGION")?;
-        exact(
-            "CIPHER_AWS_REGION",
-            &region,
-            &production.aws_region,
-            "must name the production AWS region",
-        )?;
+        if !valid_aws_region(&region) {
+            return Err(ConfigError::new(
+                "CIPHER_AWS_REGION",
+                "must be an AWS region name",
+            ));
+        }
 
         let account_id = required(&mut lookup, "CIPHER_AWS_ACCOUNT_ID")?;
         if account_id.len() != 12
@@ -134,20 +121,18 @@ impl ServerConfig {
         }
 
         let api_origin = required(&mut lookup, "CIPHER_API_ORIGIN")?;
-        exact(
-            "CIPHER_API_ORIGIN",
-            &api_origin,
-            &production.api_origin,
-            "must use the production HTTPS origin",
-        )?;
-
         let realtime_url = required(&mut lookup, "CIPHER_REALTIME_URL")?;
-        exact(
-            "CIPHER_REALTIME_URL",
-            &realtime_url,
-            &production.realtime_url,
-            "must use the production WebSocket URL",
-        )?;
+        let api_host = https_host(&api_origin)
+            .ok_or_else(|| ConfigError::new("CIPHER_API_ORIGIN", "must be an HTTPS origin"))?;
+        let realtime_host = wss_host(&realtime_url).ok_or_else(|| {
+            ConfigError::new("CIPHER_REALTIME_URL", "must be a secure WebSocket URL")
+        })?;
+        if api_host != realtime_host {
+            return Err(ConfigError::new(
+                "CIPHER_REALTIME_URL",
+                "must use the API origin host",
+            ));
+        }
 
         let cognito_user_pool_id = required(&mut lookup, "CIPHER_COGNITO_USER_POOL_ID")?;
         let pool_prefix = format!("{region}_");
@@ -194,13 +179,10 @@ impl ServerConfig {
         }
 
         let media_bucket = required(&mut lookup, "CIPHER_MEDIA_BUCKET")?;
-        if !valid_bucket_name(&media_bucket)
-            || !media_bucket.starts_with("cipher-production-")
-            || media_bucket.contains("example")
-        {
+        if !valid_bucket_name(&media_bucket) || media_bucket.contains("example") {
             return Err(ConfigError::new(
                 "CIPHER_MEDIA_BUCKET",
-                "must be a production Cipher S3 bucket name",
+                "must be an S3 bucket name",
             ));
         }
 
@@ -225,15 +207,6 @@ impl ServerConfig {
     }
 }
 
-fn production_boundary() -> Result<ProductionBoundary, ConfigError> {
-    serde_json::from_str(PRODUCTION_CONFIG_JSON).map_err(|_| {
-        ConfigError::new(
-            "config/production.json",
-            "must contain the production boundary",
-        )
-    })
-}
-
 fn required(
     lookup: &mut impl FnMut(&str) -> Option<String>,
     key: &'static str,
@@ -251,18 +224,6 @@ fn required(
     Ok(value)
 }
 
-fn exact(
-    key: &'static str,
-    actual: &str,
-    expected: &str,
-    reason: &'static str,
-) -> Result<(), ConfigError> {
-    if actual != expected {
-        return Err(ConfigError::new(key, reason));
-    }
-    Ok(())
-}
-
 fn table_name(
     lookup: &mut impl FnMut(&str) -> Option<String>,
     key: &'static str,
@@ -272,14 +233,52 @@ fn table_name(
         || !value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
-        || !value.starts_with("cipher-production-")
     {
-        return Err(ConfigError::new(
-            key,
-            "must be a production Cipher DynamoDB table name",
-        ));
+        return Err(ConfigError::new(key, "must be a DynamoDB table name"));
     }
     Ok(value)
+}
+
+fn valid_aws_region(value: &str) -> bool {
+    let parts = value.split('-').collect::<Vec<_>>();
+    let Some(number) = parts.last() else {
+        return false;
+    };
+    (parts.len() == 3 || (parts.len() == 4 && parts[1] == "gov"))
+        && parts.iter().all(|part| !part.is_empty())
+        && number.parse::<u8>().is_ok()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
+fn https_host(value: &str) -> Option<&str> {
+    endpoint_host(value, "https://", false)
+}
+
+fn wss_host(value: &str) -> Option<&str> {
+    endpoint_host(value, "wss://", true)
+}
+
+fn endpoint_host<'a>(value: &'a str, scheme: &str, require_path: bool) -> Option<&'a str> {
+    let remainder = value.strip_prefix(scheme)?;
+    if remainder.is_empty()
+        || remainder.contains(['?', '#', '@'])
+        || remainder.bytes().any(|byte| byte.is_ascii_whitespace())
+    {
+        return None;
+    }
+    let (host, path) = remainder.split_once('/').unwrap_or((remainder, ""));
+    if host.is_empty()
+        || !host
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b':'))
+        || (require_path && path.is_empty())
+        || (!require_path && !path.is_empty())
+    {
+        return None;
+    }
+    Some(host)
 }
 
 /// Validates S3 bucket syntax, including the IPv4-address exclusion.
@@ -317,30 +316,28 @@ fn valid_bucket_name(value: &str) -> bool {
 mod tests {
     use std::collections::HashMap;
 
-    use super::{REQUIRED_KEYS, ServerConfig, production_boundary};
+    use super::{REQUIRED_KEYS, ServerConfig};
 
     fn valid_values() -> HashMap<&'static str, String> {
-        let production = production_boundary().unwrap();
-        HashMap::from([
+        let mut values = include_str!("../../../.env.example")
+            .lines()
+            .filter_map(|line| line.split_once('='))
+            .filter(|(key, _)| key.starts_with("CIPHER_"))
+            .map(|(key, value)| (key, value.to_owned()))
+            .collect::<HashMap<_, _>>();
+        let region = values["CIPHER_AWS_REGION"].clone();
+        values.extend([
             ("CIPHER_SERVER_BIND", "127.0.0.1:3000".into()),
-            ("CIPHER_AWS_REGION", production.aws_region),
             ("CIPHER_AWS_ACCOUNT_ID", "123456789012".into()),
-            ("CIPHER_API_ORIGIN", production.api_origin),
-            ("CIPHER_REALTIME_URL", production.realtime_url),
-            ("CIPHER_COGNITO_USER_POOL_ID", "us-east-1_a1B2c3D4e".into()),
+            ("CIPHER_COGNITO_USER_POOL_ID", format!("{region}_a1B2c3D4e")),
             ("CIPHER_COGNITO_CLIENT_ID", "1a2b3c4d5e6f7g8h9i".into()),
-            ("CIPHER_USERS_TABLE", "cipher-production-users".into()),
-            (
-                "CIPHER_CONVERSATIONS_TABLE",
-                "cipher-production-conversations".into(),
-            ),
-            ("CIPHER_MESSAGES_TABLE", "cipher-production-messages".into()),
-            ("CIPHER_MEDIA_TABLE", "cipher-production-media".into()),
-            (
-                "CIPHER_MEDIA_BUCKET",
-                "cipher-production-123456789012-us-east-1-media".into(),
-            ),
-        ])
+            ("CIPHER_USERS_TABLE", "cipher-users".into()),
+            ("CIPHER_CONVERSATIONS_TABLE", "cipher-conversations".into()),
+            ("CIPHER_MESSAGES_TABLE", "cipher-messages".into()),
+            ("CIPHER_MEDIA_TABLE", "cipher-media".into()),
+            ("CIPHER_MEDIA_BUCKET", "cipher-123456789012-media".into()),
+        ]);
+        values
     }
 
     fn parse(values: &HashMap<&'static str, String>) -> Result<ServerConfig, String> {
@@ -350,11 +347,13 @@ mod tests {
     #[test]
     fn parses_complete_production_configuration() {
         let config = parse(&valid_values()).unwrap();
-        let production = production_boundary().unwrap();
 
         assert!(config.bind.ip().is_loopback());
-        assert_eq!(config.endpoints.api_origin, production.api_origin);
-        assert_eq!(config.aws.region, production.aws_region);
+        assert_eq!(
+            config.endpoints.api_origin,
+            valid_values()["CIPHER_API_ORIGIN"]
+        );
+        assert_eq!(config.aws.region, valid_values()["CIPHER_AWS_REGION"]);
     }
 
     #[test]
@@ -369,9 +368,10 @@ mod tests {
 
     #[test]
     fn rejects_blank_or_padded_values() {
-        for value in ["", " us-east-1", "us-east-1 "] {
+        let region = valid_values()["CIPHER_AWS_REGION"].clone();
+        for value in [String::new(), format!(" {region}"), format!("{region} ")] {
             let mut values = valid_values();
-            values.insert("CIPHER_AWS_REGION", value.into());
+            values.insert("CIPHER_AWS_REGION", value);
 
             assert!(parse(&values).is_err());
         }
@@ -389,17 +389,10 @@ mod tests {
 
     #[test]
     fn rejects_the_wrong_region_or_endpoints() {
-        let production = production_boundary().unwrap();
         for (key, value) in [
-            ("CIPHER_AWS_REGION", "us-east-2".to_owned()),
-            (
-                "CIPHER_API_ORIGIN",
-                production.api_origin.replacen("https", "http", 1),
-            ),
-            (
-                "CIPHER_REALTIME_URL",
-                production.realtime_url.replace("/v1/realtime", "/realtime"),
-            ),
+            ("CIPHER_AWS_REGION", "not a region".to_owned()),
+            ("CIPHER_API_ORIGIN", "not-an-origin".to_owned()),
+            ("CIPHER_REALTIME_URL", "not-a-websocket-url".to_owned()),
         ] {
             let mut values = valid_values();
             values.insert(key, value);
@@ -409,16 +402,28 @@ mod tests {
     }
 
     #[test]
+    fn requires_matching_api_and_realtime_hosts() {
+        let mut values = valid_values();
+        let realtime = values["CIPHER_REALTIME_URL"].replacen("cipher.", "other.", 1);
+        values.insert("CIPHER_REALTIME_URL", realtime);
+
+        assert_eq!(
+            parse(&values).unwrap_err(),
+            "CIPHER_REALTIME_URL must use the API origin host"
+        );
+    }
+
+    #[test]
     fn rejects_invalid_aws_identifiers() {
         for (key, value) in [
             ("CIPHER_AWS_ACCOUNT_ID", "123"),
             ("CIPHER_AWS_ACCOUNT_ID", "000000000000"),
-            ("CIPHER_COGNITO_USER_POOL_ID", "us-east-2_wrong"),
-            ("CIPHER_COGNITO_USER_POOL_ID", "us-east-1_EXAMPLE123"),
+            ("CIPHER_COGNITO_USER_POOL_ID", "wrong_wrong"),
+            ("CIPHER_COGNITO_USER_POOL_ID", "invalid_EXAMPLE123"),
             ("CIPHER_COGNITO_CLIENT_ID", "not a client"),
-            ("CIPHER_USERS_TABLE", "users"),
-            ("CIPHER_MEDIA_BUCKET", "Cipher-production-media"),
-            ("CIPHER_MEDIA_BUCKET", "cipher-production-example-media"),
+            ("CIPHER_USERS_TABLE", "u"),
+            ("CIPHER_MEDIA_BUCKET", "Cipher-media"),
+            ("CIPHER_MEDIA_BUCKET", "cipher-example-media"),
         ] {
             let mut values = valid_values();
             values.insert(key, value.into());
@@ -450,7 +455,6 @@ mod tests {
     #[test]
     fn example_and_required_keys_stay_in_sync() {
         let example = include_str!("../../../.env.example");
-        let production = production_boundary().unwrap();
 
         for key in REQUIRED_KEYS {
             assert_eq!(example.matches(&format!("{key}=")).count(), 1, "{key}");
@@ -460,12 +464,6 @@ mod tests {
             assert!(!example.contains(forbidden));
         }
 
-        for (key, value) in [
-            ("CIPHER_AWS_REGION", production.aws_region),
-            ("CIPHER_API_ORIGIN", production.api_origin),
-            ("CIPHER_REALTIME_URL", production.realtime_url),
-        ] {
-            assert!(example.contains(&format!("{key}={value}")), "{key}");
-        }
+        assert!(parse(&valid_values()).is_ok());
     }
 }

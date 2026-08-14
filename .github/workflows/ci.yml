@@ -63,4 +63,4 @@ jobs:
       - run: npm --prefix infra ci --ignore-scripts
       - run: npm --prefix infra audit --audit-level=high
       - run: npm --prefix infra run typecheck
-      - run: CDK_DEFAULT_ACCOUNT=123456789012 npm --prefix infra run synth
+      - run: set -a && . ./.env.example && set +a && CDK_DEFAULT_ACCOUNT=123456789012 npm --prefix infra run synth

@@ -10,5 +10,5 @@
     "target": "ES2023",
     "types": ["bun"]
   },
-  "include": ["config/production.json", "config/production.ts", "scripts"]
+  "include": ["config/environment.ts", "scripts"]
 }

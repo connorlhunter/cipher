@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { loadInfrastructureConfig } from "../config/environment";
 import {
   parseArguments,
   plannedCommands,
@@ -8,6 +9,13 @@ import {
 } from "../scripts/infra-control";
 
 const expectedAccount = "123456789012";
+const config = loadInfrastructureConfig({
+  CIPHER_AWS_REGION: "us-east-1",
+  CIPHER_STATE_STACK: "CipherProductionState",
+  CIPHER_CONTROL_STACK: "CipherProductionControl",
+  CIPHER_NETWORK_STACK: "CipherProductionNetwork",
+  CIPHER_RUNTIME_STACK: "CipherProductionRuntime",
+});
 
 function confirmation(action: "pause" | "resume" | "destroy-all"): string {
   const verb = action === "destroy-all" ? "UNLOCK" : action.toUpperCase();
@@ -63,6 +71,7 @@ describe("infrastructure controls", () => {
       ["pause", `--confirm=${confirmation("pause")}`, "--dry-run"],
       interactiveEnvironment,
       runner,
+      config,
     );
 
     expect(calls).toEqual([]);
@@ -80,6 +89,7 @@ describe("infrastructure controls", () => {
         ["destroy-all", `--confirm=${confirmation("destroy-all")}`],
         interactiveEnvironment,
         runner,
+        config,
       ),
     ).toThrow("--destroy-confirm=DESTROY-CIPHER-PRODUCTION-AND-ALL-DATA");
   });
@@ -92,6 +102,7 @@ describe("infrastructure controls", () => {
         ["resume", `--confirm=${confirmation("resume")}`],
         { accountId: expectedAccount, isInteractive: false },
         runner,
+        config,
       ),
     ).toThrow("outside an interactive terminal");
 
@@ -106,6 +117,7 @@ describe("infrastructure controls", () => {
         ["resume", `--confirm=${confirmation("resume")}`],
         interactiveEnvironment,
         runner,
+        config,
       ),
     ).toThrow("active AWS account is not Cipher production");
 
@@ -120,6 +132,7 @@ describe("infrastructure controls", () => {
       ["pause", `--confirm=${confirmation("pause")}`],
       interactiveEnvironment,
       runner,
+      config,
     );
 
     expect(commands).toEqual([]);
@@ -145,6 +158,7 @@ describe("infrastructure controls", () => {
       ],
       interactiveEnvironment,
       runner,
+      config,
     );
 
     const cdkCalls = calls.filter((command) => command[0] === "npm");
@@ -213,11 +227,11 @@ describe("infrastructure controls", () => {
 
   test("keeps the complete dry-run plan scoped to four named stacks", () => {
     expect(
-      plannedCommands("destroy-all")
+      plannedCommands("destroy-all", config)
         .flat()
         .every((value) => !value.includes("*")),
     ).toBe(true);
-    expect(plannedCommands("resume")).toEqual([
+    expect(plannedCommands("resume", config)).toEqual([
       [
         "npm",
         "--prefix",
