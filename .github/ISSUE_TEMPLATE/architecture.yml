@@ -1,6 +1,6 @@
 name: Architecture decision
 description: Record a decision before implementation depends on it.
-title: "Decision: "
+title: "docs: "
 labels: [enhancement]
 body:
   - type: textarea

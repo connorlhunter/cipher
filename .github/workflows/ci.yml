@@ -21,6 +21,12 @@ jobs:
         with:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bun run naming:check
+      - name: Check pull request title
+        if: github.event_name == 'pull_request'
+        run: bun scripts/change-naming.ts --pull-request-title
+        env:
+          CIPHER_PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
       - run: bun audit --audit-level=high
       - run: cargo install cargo-deny --version 0.20.2 --locked
       - run: cargo deny check

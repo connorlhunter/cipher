@@ -30,6 +30,7 @@
     "infra:resume": "bun scripts/infra-control.ts resume",
     "infra:synth": "npm --prefix infra run synth",
     "lint": "bun x eslint . && cargo clippy --workspace --all-targets -- -D warnings",
+    "naming:check": "bun scripts/change-naming.ts --branch",
     "prepare": "bun scripts/setup-git-hooks.ts",
     "server:dev": "cargo run --locked -p cipher-server",
     "test": "bun run test:frontend && bun run test:rust",
@@ -39,7 +40,7 @@
     "typecheck": "bun x tsgo --build --pretty false && npm --prefix infra run typecheck",
     "version:check": "bun scripts/release-version.ts --check",
     "version:sync": "bun scripts/release-version.ts",
-    "verify": "bun run version:check && bun run toolchain:check && bun run audit && bun run codeql:scan && bun run format:check && bun run lint && bun run typecheck && bun run test && bun run web:build",
+    "verify": "bun run naming:check && bun run version:check && bun run toolchain:check && bun run audit && bun run codeql:scan && bun run format:check && bun run lint && bun run typecheck && bun run test && bun run web:build",
     "web:build": "vite build",
     "web:dev": "vite"
   },
