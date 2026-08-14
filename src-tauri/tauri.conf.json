@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Cipher",
+  "version": "0.1.0",
+  "identifier": "me.connorhunter.cipher",
+  "build": {
+    "beforeDevCommand": "bun run web:dev",
+    "beforeBuildCommand": "bun run web:build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Cipher",
+        "width": 1100,
+        "height": 760,
+        "minWidth": 900,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": {
+        "base-uri": "'none'",
+        "connect-src": "ipc: http://ipc.localhost",
+        "default-src": "'self'",
+        "font-src": "'self'",
+        "frame-src": "'none'",
+        "img-src": "'self' data:",
+        "object-src": "'none'",
+        "style-src": "'self'"
+      },
+      "devCsp": {
+        "base-uri": "'none'",
+        "connect-src": "ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1420",
+        "default-src": "'self'",
+        "font-src": "'self'",
+        "frame-src": "'none'",
+        "img-src": "'self' data:",
+        "object-src": "'none'",
+        "style-src": "'self'"
+      },
+      "freezePrototype": true,
+      "headers": {
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "X-Content-Type-Options": "nosniff"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "macOS": {
+      "minimumSystemVersion": "13.0"
+    }
+  }
+}

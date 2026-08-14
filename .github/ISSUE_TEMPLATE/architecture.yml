@@ -1,0 +1,29 @@
+name: Architecture decision
+description: Record a decision before implementation depends on it.
+title: "Decision: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What needs to be decided and why now?
+    validations:
+      required: true
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision
+    validations:
+      required: true
+  - type: textarea
+    id: tradeoffs
+    attributes:
+      label: Tradeoffs
+      description: What becomes easier, harder, or deferred?
+    validations:
+      required: true
+  - type: textarea
+    id: followup
+    attributes:
+      label: Follow-up work
