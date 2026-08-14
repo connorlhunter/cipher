@@ -2,6 +2,9 @@ import { type JSX, useEffect, useState } from "react";
 
 import { desktopStatus, type DesktopStatus } from "./desktop";
 
+/**
+ * @returns The desktop shell and its current native-core status.
+ */
 export function App(): JSX.Element {
   const [status, setStatus] = useState<DesktopStatus | null>(null);
   const [failed, setFailed] = useState(false);

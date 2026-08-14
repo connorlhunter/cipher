@@ -1,5 +1,10 @@
 [workspace]
-members = ["apps/cipher-server", "crates/cipher-types", "src-tauri"]
+members = [
+  "apps/cipher-server",
+  "crates/cipher-test-support",
+  "crates/cipher-types",
+  "src-tauri",
+]
 resolver = "3"
 
 [workspace.package]
@@ -10,13 +15,14 @@ rust-version = "1.96"
 version = "0.1.0"
 
 [workspace.dependencies]
-axum = { version = "0.8.9", features = ["ws"] }
-serde = { version = "1.0.229", features = ["derive"] }
-tokio = { version = "1.53.1", features = ["macros", "net", "rt-multi-thread"] }
-tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+axum = { version = "^0.8.9", features = ["ws"] }
+serde = { version = "^1.0.229", features = ["derive"] }
+tokio = { version = "^1.53.1", features = ["macros", "net", "rt-multi-thread"] }
+tracing = "^0.1.44"
+tracing-subscriber = { version = "^0.3.23", features = ["env-filter"] }
 
 [workspace.lints.rust]
+missing_docs = "warn"
 unsafe_code = "forbid"
 
 [workspace.lints.clippy]

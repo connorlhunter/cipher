@@ -1,9 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 
+/**
+ * @property message - Status reported by the native desktop core.
+ */
 export interface DesktopStatus {
   message: string;
 }
 
+/**
+ * @param value - Untrusted status payload returned by the native command.
+ * @returns A validated desktop status.
+ */
 export function parseDesktopStatus(value: unknown): DesktopStatus {
   if (
     typeof value !== "object" ||
@@ -18,6 +25,9 @@ export function parseDesktopStatus(value: unknown): DesktopStatus {
   return { message: value.message };
 }
 
+/**
+ * @returns The validated status of the native desktop core.
+ */
 export async function desktopStatus(): Promise<DesktopStatus> {
   return parseDesktopStatus(await invoke<unknown>("desktop_status"));
 }

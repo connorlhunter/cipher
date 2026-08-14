@@ -1,3 +1,11 @@
+import { requiredToolchains } from "./toolchains";
+
+const cargoDenyVersion = "0.20.2";
+
+/**
+ * @param command - Executable and arguments to run.
+ * @returns Nothing; throws when the command fails.
+ */
 function run(command: string[]): void {
   const result = Bun.spawnSync(command, {
     stderr: "inherit",
@@ -13,7 +21,7 @@ run([
   "rustup",
   "toolchain",
   "install",
-  "1.96.0",
+  requiredToolchains.rust,
   "--profile",
   "minimal",
   "--component",
@@ -23,9 +31,9 @@ const cargoDeny = Bun.spawnSync(["cargo", "deny", "--version"], {
   stderr: "ignore",
   stdout: "pipe",
 });
-const cargoDenyVersion = new TextDecoder().decode(cargoDeny.stdout).trim();
-if (cargoDeny.exitCode !== 0 || !cargoDenyVersion.endsWith(" 0.20.2")) {
-  run(["cargo", "install", "cargo-deny", "--version", "0.20.2", "--locked"]);
+const installedCargoDeny = new TextDecoder().decode(cargoDeny.stdout).trim();
+if (cargoDeny.exitCode !== 0 || !installedCargoDeny.endsWith(` ${cargoDenyVersion}`)) {
+  run(["cargo", "install", "cargo-deny", "--version", cargoDenyVersion, "--locked"]);
 }
 run(["bun", "install", "--frozen-lockfile"]);
 run(["bun", "run", "toolchain:check"]);

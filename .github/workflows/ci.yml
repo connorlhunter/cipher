@@ -23,10 +23,10 @@ jobs:
       - run: bun install --frozen-lockfile --ignore-scripts
       - run: bun audit --audit-level=high
       - run: cargo install cargo-deny --version 0.20.2 --locked
-      - run: cargo deny check advisories licenses sources
+      - run: cargo deny check
       - run: bun x prettier --check . --ignore-unknown
       - run: bun x eslint .
-      - run: bun run typecheck
+      - run: bun x tsgo --build --pretty false
       - run: bun run test:frontend
       - run: bun run web:build
 
@@ -41,11 +41,28 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
-      - run: rustup toolchain install 1.96.0 --profile minimal --component clippy,rustfmt
+      - run: rustup toolchain install
       - run: bun install --frozen-lockfile --ignore-scripts
       - run: bun run toolchain:check
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
       - run: cargo test --workspace --locked
       - run: cargo build --workspace --release --locked
       - run: bun run desktop:build
+
+  infrastructure:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - run: npm --prefix infra ci --ignore-scripts
+      - run: npm --prefix infra audit --audit-level=high
+      - run: npm --prefix infra run typecheck
+      - run: set -a && . ./.env.example && set +a && CDK_DEFAULT_ACCOUNT=123456789012 npm --prefix infra run synth

@@ -4,6 +4,8 @@
 /coverage/
 /src-tauri/target/
 /src-tauri/gen/
+/infra/cdk.out/
+/infra/node_modules/
 /.env
 /.env.*
 !/.env.example

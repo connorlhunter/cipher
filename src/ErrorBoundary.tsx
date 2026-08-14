@@ -1,24 +1,45 @@
 import { Component, type ErrorInfo, type JSX, type ReactNode } from "react";
 
+/**
+ * @property children - Application content protected by the error boundary.
+ */
 interface ErrorBoundaryProps {
   children: ReactNode;
 }
 
+/**
+ * @property failed - Whether a descendant raised an uncaught render error.
+ */
 interface ErrorBoundaryState {
   failed: boolean;
 }
 
+/**
+ * Replaces the application shell with a safe fallback after an uncaught render error.
+ */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState = { failed: false };
 
+  /**
+   * @returns State that activates the fallback interface.
+   */
   public static getDerivedStateFromError(): ErrorBoundaryState {
     return { failed: true };
   }
 
+  /**
+   * Reserves a hook for forwarding redacted native diagnostics.
+   *
+   * @param _error - Error raised by a descendant.
+   * @param _info - React component stack for the failure.
+   */
   public componentDidCatch(_error: Error, _info: ErrorInfo): void {
     // Native diagnostics will receive a redacted failure event later.
   }
 
+  /**
+   * @returns The protected children or the application fallback.
+   */
   public render(): JSX.Element | ReactNode {
     if (this.state.failed) {
       return (

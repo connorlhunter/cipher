@@ -4,7 +4,14 @@ import tseslint from "typescript-eslint";
 
 export default [
   {
-    ignores: ["**/target/**", "dist/**", "node_modules/**", "src-tauri/gen/**"],
+    ignores: [
+      "**/target/**",
+      "dist/**",
+      "infra/cdk.out/**",
+      "infra/node_modules/**",
+      "node_modules/**",
+      "src-tauri/gen/**",
+    ],
   },
   {
     files: ["**/*.js"],
@@ -21,6 +28,7 @@ export default [
       parserOptions: {
         project: [
           "./tsconfig.app.json",
+          "./infra/tsconfig.json",
           "./tsconfig.node.json",
           "./tsconfig.scripts.json",
           "./tsconfig.test.json",
