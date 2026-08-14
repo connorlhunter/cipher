@@ -2,6 +2,7 @@
 /target/
 /dist/
 /coverage/
+/.codeql/
 /src-tauri/target/
 /src-tauri/gen/
 /infra/cdk.out/

@@ -4,6 +4,9 @@ import { readFileSync } from "node:fs";
 interface PackageManifest {
   devDependencies?: Record<string, string>;
   packageManager?: string;
+  toolchain?: {
+    codeql?: string;
+  };
 }
 
 /** Rust toolchain manifest fields used by repository scripts. */
@@ -47,6 +50,7 @@ const rustToolchainManifest = Bun.TOML.parse(
 /** @description Toolchain requirements read from their canonical manifests. */
 export const requiredToolchains = Object.freeze({
   bun: bunVersion(requiredString(packageManifest.packageManager, "packageManager")),
+  codeql: requiredString(packageManifest.toolchain?.codeql, "toolchain.codeql"),
   rust: requiredString(rustToolchainManifest.toolchain?.channel, "Rust toolchain channel"),
   tauri: requiredString(
     packageManifest.devDependencies?.["@tauri-apps/cli"],
