@@ -1,0 +1,10 @@
+paths-ignore:
+  - ".codeql/**"
+  - "coverage/**"
+  - "dist/**"
+  - "infra/cdk.out/**"
+  - "infra/node_modules/**"
+  - "node_modules/**"
+  - "src-tauri/gen/**"
+  - "src-tauri/target/**"
+  - "target/**"

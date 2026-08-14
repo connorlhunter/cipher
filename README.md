@@ -6,6 +6,14 @@ The first milestone is a closed-alpha desktop messaging vertical slice. Message 
 
 Project docs and diagrams: <https://connorhunter.me/projects/cipher?viewer=docs#project-viewer>
 
+## Development
+
+Run `bun run verify` before committing or pushing. The local gate requires the pinned CodeQL CLI as the literal `codeql` executable on `PATH`; `bun run codeql:scan` scans JavaScript/TypeScript, Rust, and GitHub Actions and keeps its ignored database, cache, and SARIF output under `.codeql/`.
+
+Branches use `<type>/<kebab-case-name>` and commits use `<type>[(scope)]: <imperative summary>`, where `<type>` is `feat`, `fix`, `chore`, `docs`, `test`, or `refactor`.
+
+Release branches use `release/<version>`, release-preparation commits use `chore(release): prepare <version>`, and release tags use `v<version>`.
+
 ## Releases
 
 `package.json` is the Cipher release-version source. Run `bun run version:sync` after changing it to update the Cargo workspace and Tauri metadata, then run `bun run version:check` before committing.
