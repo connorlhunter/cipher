@@ -7,14 +7,15 @@
   },
   "scripts": {
     "synth": "cdk synth",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "devDependencies": {
-    "@types/node": "24.13.3",
-    "aws-cdk": "2.1136.0",
-    "aws-cdk-lib": "2.265.0",
-    "constructs": "10.8.1",
-    "tsx": "4.23.12",
-    "typescript": "5.9.3"
+    "@types/node": "^24.13.3",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
+    "aws-cdk": "^2.1136.0",
+    "aws-cdk-lib": "^2.265.0",
+    "constructs": "^10.8.1",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3"
   }
 }

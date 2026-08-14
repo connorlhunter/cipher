@@ -1,6 +1,8 @@
+/** Defines Cipher's four production CloudFormation stack boundaries. */
 import * as cdk from "aws-cdk-lib";
+import { productionConfig } from "../../config/production.js";
 
-const productionRegion = "us-east-1";
+const productionRegion = productionConfig.awsRegion;
 const account = process.env.CDK_DEFAULT_ACCOUNT;
 const region = process.env.CIPHER_AWS_REGION ?? productionRegion;
 
@@ -17,25 +19,25 @@ const environment = { account, region };
 const allowPersistentDestruction =
   app.node.tryGetContext("cipher:allow-persistent-destruction") === "true";
 
-const state = new cdk.Stack(app, "CipherProductionState", {
+const state = new cdk.Stack(app, productionConfig.stacks.state, {
   description: "Cipher production identities and encrypted application data.",
   env: environment,
   terminationProtection: !allowPersistentDestruction,
 });
 
-const control = new cdk.Stack(app, "CipherProductionControl", {
+const control = new cdk.Stack(app, productionConfig.stacks.control, {
   description: "Cipher production image, deployment identity, and retained operations data.",
   env: environment,
   terminationProtection: !allowPersistentDestruction,
 });
 
-const network = new cdk.Stack(app, "CipherProductionNetwork", {
+const network = new cdk.Stack(app, productionConfig.stacks.network, {
   description: "Cipher production runtime network.",
   env: environment,
   terminationProtection: false,
 });
 
-const runtime = new cdk.Stack(app, "CipherProductionRuntime", {
+const runtime = new cdk.Stack(app, productionConfig.stacks.runtime, {
   description: "Cipher production ingress and backend runtime.",
   env: environment,
   terminationProtection: false,

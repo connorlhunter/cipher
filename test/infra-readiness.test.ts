@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { runReadinessCheck, type CommandRunner, type TemplateReader } from "./infra-readiness";
+import {
+  runReadinessCheck,
+  type CommandRunner,
+  type TemplateReader,
+} from "../scripts/infra-readiness";
 
-const accountId = "629577972102";
+const accountId = "123456789012";
 
 const completeTemplates: Record<string, unknown> = {
   "infra/cdk.out/CipherProductionState.template.json": {
@@ -83,7 +87,7 @@ describe("infrastructure readiness", () => {
     const { calls, runner } = createRunner();
 
     await expect(runReadinessCheck({ accountId }, runner, createReader())).resolves.toEqual([
-      "AWS account 629577972102 and us-east-1 are ready.",
+      "AWS account 123456789012 and us-east-1 are ready.",
       "CDK bootstrap is ready.",
       "All required Cipher stack resources are present in the synthesized templates.",
     ]);

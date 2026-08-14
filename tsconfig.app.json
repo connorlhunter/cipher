@@ -9,6 +9,5 @@
     "strict": true,
     "target": "ES2023"
   },
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
   "include": ["src"]
 }

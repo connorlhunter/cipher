@@ -1,5 +1,8 @@
+//! Safe resource naming helpers for live integration tests.
+
 const FIXTURE_PREFIX: &str = "cipher-live-it-";
 
+/// Names and recognizes resources owned by one live test run.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FixtureScope {
     run_id: String,
@@ -7,6 +10,9 @@ pub struct FixtureScope {
 }
 
 impl FixtureScope {
+    /// Creates a scope for a lowercase UUID v4 run identifier.
+    ///
+    /// Returns an error when the identifier is not a valid lowercase UUID v4.
     pub fn parse(run_id: &str) -> Result<Self, &'static str> {
         if !valid_v4_uuid(run_id) {
             return Err("fixture run id must be a lowercase UUID v4");
@@ -18,10 +24,14 @@ impl FixtureScope {
         })
     }
 
+    /// Returns the identifier for this test run.
     pub fn run_id(&self) -> &str {
         &self.run_id
     }
 
+    /// Builds an owned resource name from a safe label.
+    ///
+    /// Returns an error when the label contains unsupported characters.
     pub fn resource_id(&self, label: &str) -> Result<String, &'static str> {
         if label.is_empty()
             || !label
@@ -34,10 +44,12 @@ impl FixtureScope {
         Ok(format!("{}-{label}", self.namespace))
     }
 
+    /// Returns the object-storage prefix owned by this test run.
     pub fn object_prefix(&self) -> String {
         format!("fixtures/{}/", self.run_id)
     }
 
+    /// Checks that a resource name and fixture marker belong to this run.
     pub fn owns(&self, resource_id: &str, fixture_run_id: &str) -> bool {
         fixture_run_id == self.run_id
             && resource_id

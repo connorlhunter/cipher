@@ -1,7 +1,10 @@
-const requiredBun = "1.3.14";
-const requiredRust = "rustc 1.96.0";
-const requiredTauri = "tauri-cli 2.11.4";
+import { requiredToolchains } from "./toolchains";
 
+/**
+ * @param command - Version command to run.
+ * @param args - Arguments passed to the command.
+ * @returns The command's trimmed standard output.
+ */
 function commandVersion(command: string, args: string[]): string {
   const result = Bun.spawnSync([command, ...args], { stdout: "pipe", stderr: "pipe" });
   if (result.exitCode !== 0) {
@@ -11,18 +14,31 @@ function commandVersion(command: string, args: string[]): string {
   return new TextDecoder().decode(result.stdout).trim();
 }
 
-if (Bun.version !== requiredBun) {
-  throw new Error(`Cipher requires Bun ${requiredBun}; found ${Bun.version}.`);
+/**
+ * @param output - Tool version output.
+ * @param tool - Expected tool name.
+ * @returns The semantic version portion of the output.
+ */
+function semanticVersion(output: string, tool: string): string {
+  const version = output.split(" ")[1];
+  if (version === undefined || !Bun.semver.satisfies(version, version)) {
+    throw new Error(`Could not read the ${tool} version from: ${output}`);
+  }
+  return version;
+}
+
+if (!Bun.semver.satisfies(Bun.version, requiredToolchains.bun)) {
+  throw new Error(`Cipher requires Bun ${requiredToolchains.bun}; found ${Bun.version}.`);
 }
 
 const rustVersion = commandVersion("rustc", ["--version"]);
-if (!rustVersion.startsWith(requiredRust)) {
-  throw new Error(`Cipher requires ${requiredRust}; found ${rustVersion}.`);
+if (semanticVersion(rustVersion, "Rust") !== requiredToolchains.rust) {
+  throw new Error(`Cipher requires Rust ${requiredToolchains.rust}; found ${rustVersion}.`);
 }
 
 const cargoVersion = commandVersion("cargo", ["--version"]);
-if (!cargoVersion.startsWith("cargo 1.96.0")) {
-  throw new Error(`Cipher requires cargo 1.96.0; found ${cargoVersion}.`);
+if (semanticVersion(cargoVersion, "Cargo") !== requiredToolchains.rust) {
+  throw new Error(`Cipher requires Cargo ${requiredToolchains.rust}; found ${cargoVersion}.`);
 }
 
 if (process.platform !== "darwin" && process.platform !== "win32") {
@@ -42,8 +58,9 @@ if (process.platform === "darwin") {
 }
 
 const tauriVersion = commandVersion("bunx", ["tauri", "--version"]);
-if (tauriVersion !== requiredTauri) {
-  throw new Error(`Cipher requires ${requiredTauri}; found ${tauriVersion}.`);
+const installedTauri = semanticVersion(tauriVersion, "Tauri CLI");
+if (!Bun.semver.satisfies(installedTauri, requiredToolchains.tauri)) {
+  throw new Error(`Cipher requires Tauri CLI ${requiredToolchains.tauri}; found ${tauriVersion}.`);
 }
 
 console.log(`Bun ${Bun.version}`);

@@ -4,11 +4,11 @@ all-features = true
 
 [advisories]
 ignore = [
-  { id = "RUSTSEC-2025-0075", reason = "Tauri 2.11.5 requires urlpattern; review when Tauri updates." },
-  { id = "RUSTSEC-2025-0080", reason = "Tauri 2.11.5 requires urlpattern; review when Tauri updates." },
-  { id = "RUSTSEC-2025-0081", reason = "Tauri 2.11.5 requires urlpattern; review when Tauri updates." },
-  { id = "RUSTSEC-2025-0098", reason = "Tauri 2.11.5 requires urlpattern; review when Tauri updates." },
-  { id = "RUSTSEC-2025-0100", reason = "Tauri 2.11.5 requires urlpattern; review when Tauri updates." },
+  { id = "RUSTSEC-2025-0075", reason = "Tauri requires urlpattern; review whenever Tauri updates." },
+  { id = "RUSTSEC-2025-0080", reason = "Tauri requires urlpattern; review whenever Tauri updates." },
+  { id = "RUSTSEC-2025-0081", reason = "Tauri requires urlpattern; review whenever Tauri updates." },
+  { id = "RUSTSEC-2025-0098", reason = "Tauri requires urlpattern; review whenever Tauri updates." },
+  { id = "RUSTSEC-2025-0100", reason = "Tauri requires urlpattern; review whenever Tauri updates." },
 ]
 
 [licenses]

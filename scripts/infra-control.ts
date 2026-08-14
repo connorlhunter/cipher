@@ -1,28 +1,48 @@
-const productionRegion = "us-east-1";
-const stateStack = "CipherProductionState";
-const controlStack = "CipherProductionControl";
-const networkStack = "CipherProductionNetwork";
-const runtimeStack = "CipherProductionRuntime";
+import { productionConfig } from "../config/production";
+
+const productionRegion = productionConfig.awsRegion;
+const stateStack = productionConfig.stacks.state;
+const controlStack = productionConfig.stacks.control;
+const networkStack = productionConfig.stacks.network;
+const runtimeStack = productionConfig.stacks.runtime;
 const persistentStacks = [stateStack, controlStack];
 const disposableStacks = [runtimeStack, networkStack];
 
+/**
+ * Infrastructure lifecycle actions supported by the production control script.
+ */
 export type InfrastructureAction = "pause" | "resume" | "destroy-all";
 
+/**
+ * @property exitCode - Child-process exit code.
+ * @property stderr - Captured standard error.
+ * @property stdout - Captured standard output.
+ */
 export interface CommandResult {
   exitCode: number;
   stderr: string;
   stdout: string;
 }
 
+/**
+ * @property run - Executes a command and returns its captured result.
+ */
 export interface CommandRunner {
   run(command: string[]): CommandResult;
 }
 
+/**
+ * @property accountId - Expected production AWS account identifier.
+ * @property isInteractive - Optional terminal-interactivity override.
+ */
 export interface InfrastructureEnvironment {
   accountId?: string;
   isInteractive?: boolean;
 }
 
+/**
+ * Parsed command-line values for one infrastructure action.
+ */
 interface ParsedArguments {
   action: InfrastructureAction;
   confirmation?: string;
@@ -41,6 +61,10 @@ const liveRunner: CommandRunner = {
   },
 };
 
+/**
+ * @param args - Command-line arguments to parse.
+ * @returns A validated infrastructure action and its safety flags.
+ */
 export function parseArguments(args: string[]): ParsedArguments {
   const [action, ...flags] = args;
   if (action !== "pause" && action !== "resume" && action !== "destroy-all") {
@@ -69,10 +93,18 @@ export function parseArguments(args: string[]): ParsedArguments {
   return { action, confirmation, destroyConfirmation, dryRun };
 }
 
+/**
+ * @param args - CDK arguments to append after the package-local executable separator.
+ * @returns A command that runs the infrastructure package's CDK executable.
+ */
 function cdkCommand(...args: string[]): string[] {
   return ["npm", "--prefix", "infra", "exec", "cdk", "--", ...args];
 }
 
+/**
+ * @param action - Infrastructure lifecycle action to plan.
+ * @returns The complete ordered command plan for the action.
+ */
 export function plannedCommands(action: InfrastructureAction): string[][] {
   switch (action) {
     case "pause":
@@ -105,6 +137,10 @@ export function plannedCommands(action: InfrastructureAction): string[][] {
   }
 }
 
+/**
+ * @param environment - Infrastructure environment to validate.
+ * @returns The expected 12-digit production account identifier.
+ */
 function accountId(environment: InfrastructureEnvironment): string {
   if (environment.accountId === undefined || !/^\d{12}$/u.test(environment.accountId)) {
     throw new Error("CIPHER_AWS_ACCOUNT_ID must name the expected 12-digit production account.");
@@ -112,6 +148,11 @@ function accountId(environment: InfrastructureEnvironment): string {
   return environment.accountId;
 }
 
+/**
+ * @param action - Infrastructure action requiring confirmation.
+ * @param expectedAccount - Expected production AWS account identifier.
+ * @returns The action-specific confirmation phrase.
+ */
 function confirmationFor(action: InfrastructureAction, expectedAccount: string): string {
   switch (action) {
     case "pause":
@@ -123,10 +164,18 @@ function confirmationFor(action: InfrastructureAction, expectedAccount: string):
   }
 }
 
+/**
+ * @param expectedAccount - Expected production AWS account identifier.
+ * @returns The additional irreversible-destruction confirmation phrase.
+ */
 function destroyConfirmationFor(expectedAccount: string): string {
   return `DESTROY-CIPHER-PRODUCTION-AND-ALL-DATA-${expectedAccount}-${productionRegion}`;
 }
 
+/**
+ * @param runner - Command runner used to query AWS.
+ * @returns The active AWS account identifier.
+ */
 function currentAccount(runner: CommandRunner): string {
   const result = runner.run([
     "aws",
@@ -145,6 +194,11 @@ function currentAccount(runner: CommandRunner): string {
   return result.stdout.trim();
 }
 
+/**
+ * @param environment - Expected production environment and terminal state.
+ * @param runner - Command runner used to query AWS.
+ * @returns The verified production AWS account identifier.
+ */
 function assertProductionTarget(
   environment: InfrastructureEnvironment,
   runner: CommandRunner,
@@ -160,6 +214,11 @@ function assertProductionTarget(
   return expectedAccount;
 }
 
+/**
+ * @param stack - Exact CloudFormation stack name to inspect.
+ * @param runner - Command runner used to query AWS.
+ * @returns Whether the named stack currently exists.
+ */
 function stackExists(stack: string, runner: CommandRunner): boolean {
   const result = runner.run([
     "aws",
@@ -179,6 +238,11 @@ function stackExists(stack: string, runner: CommandRunner): boolean {
   throw new Error(`Could not determine whether ${stack} exists. No changes were made.`);
 }
 
+/**
+ * @param action - Infrastructure action to reduce to existing stacks.
+ * @param runner - Command runner used to query AWS.
+ * @returns Commands that still need to run for the action.
+ */
 function existingCommands(action: InfrastructureAction, runner: CommandRunner): string[][] {
   switch (action) {
     case "pause":
@@ -217,6 +281,11 @@ function existingCommands(action: InfrastructureAction, runner: CommandRunner): 
   }
 }
 
+/**
+ * @param command - Infrastructure command to execute.
+ * @param runner - Command runner used for execution.
+ * @returns Nothing; throws when the command fails.
+ */
 function runCommand(command: string[], runner: CommandRunner): void {
   const result = runner.run(command);
   if (result.exitCode !== 0) {
@@ -224,6 +293,14 @@ function runCommand(command: string[], runner: CommandRunner): void {
   }
 }
 
+/**
+ * Validates safety confirmations and applies one production infrastructure action.
+ *
+ * @param args - Command-line arguments describing the action and confirmations.
+ * @param environment - Expected production environment and terminal state.
+ * @param runner - Command runner used for AWS and CDK operations.
+ * @returns Display-ready commands that were planned or completed.
+ */
 export function runInfrastructureControl(
   args: string[],
   environment: InfrastructureEnvironment,
@@ -257,6 +334,10 @@ export function runInfrastructureControl(
   return commands.map((command) => command.join(" "));
 }
 
+/**
+ * @param action - Completed infrastructure action.
+ * @returns A short operational note about the resulting state.
+ */
 function completionNote(action: InfrastructureAction): string {
   switch (action) {
     case "pause":

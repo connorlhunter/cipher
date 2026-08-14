@@ -5,9 +5,10 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,
+    "resolveJsonModule": true,
     "strict": true,
     "target": "ES2023",
     "types": ["bun"]
   },
-  "include": ["scripts"]
+  "include": ["config/production.json", "config/production.ts", "scripts"]
 }

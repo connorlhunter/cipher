@@ -1,3 +1,5 @@
+//! Binary entry point for the Cipher server.
+
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     tracing_subscriber::fmt()

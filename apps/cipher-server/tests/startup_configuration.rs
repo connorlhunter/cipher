@@ -1,3 +1,5 @@
+//! Verifies that invalid startup configuration stops the server safely.
+
 use std::process::Command;
 
 use cipher_server::config::REQUIRED_KEYS;

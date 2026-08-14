@@ -1,36 +1,55 @@
-const productionRegion = "us-east-1";
+import { productionConfig } from "../config/production";
+
+const productionRegion = productionConfig.awsRegion;
 const bootstrapStack = "CDKToolkit";
 
-type StackName =
-  | "CipherProductionState"
-  | "CipherProductionControl"
-  | "CipherProductionNetwork"
-  | "CipherProductionRuntime";
-
+/**
+ * @property exitCode - Child-process exit code.
+ * @property stderr - Captured standard error.
+ * @property stdout - Captured standard output.
+ */
 export interface CommandResult {
   exitCode: number;
   stderr: string;
   stdout: string;
 }
 
+/**
+ * @property run - Executes a command and returns its captured result.
+ */
 export interface CommandRunner {
   run(command: string[]): CommandResult;
 }
 
+/**
+ * @property read - Reads and parses a synthesized CloudFormation template.
+ */
 export interface TemplateReader {
   read(path: string): Promise<unknown>;
 }
 
+/**
+ * @property accountId - Expected production AWS account identifier.
+ */
 export interface ReadinessEnvironment {
   accountId?: string;
 }
 
-const requiredResources: Record<StackName, string[]> = {
-  CipherProductionState: ["AWS::Cognito::UserPool", "AWS::DynamoDB::Table", "AWS::S3::Bucket"],
-  CipherProductionControl: ["AWS::ECR::Repository", "AWS::IAM::Role"],
-  CipherProductionNetwork: ["AWS::EC2::VPC"],
-  CipherProductionRuntime: ["AWS::ElasticLoadBalancingV2::LoadBalancer", "AWS::ECS::Service"],
-};
+/**
+ * Resource types required in each synthesized production stack.
+ */
+const requiredResources = new Map<string, ReadonlyArray<string>>([
+  [
+    productionConfig.stacks.state,
+    ["AWS::Cognito::UserPool", "AWS::DynamoDB::Table", "AWS::S3::Bucket"],
+  ],
+  [productionConfig.stacks.control, ["AWS::ECR::Repository", "AWS::IAM::Role"]],
+  [productionConfig.stacks.network, ["AWS::EC2::VPC"]],
+  [
+    productionConfig.stacks.runtime,
+    ["AWS::ElasticLoadBalancingV2::LoadBalancer", "AWS::ECS::Service"],
+  ],
+]);
 
 const liveRunner: CommandRunner = {
   run(command) {
@@ -53,6 +72,10 @@ const liveTemplateReader: TemplateReader = {
   },
 };
 
+/**
+ * @param environment - Readiness environment to validate.
+ * @returns The expected 12-digit production account identifier.
+ */
 function expectedAccount(environment: ReadinessEnvironment): string {
   if (environment.accountId === undefined || !/^\d{12}$/u.test(environment.accountId)) {
     throw new Error("CIPHER_AWS_ACCOUNT_ID must name the expected 12-digit production account.");
@@ -60,6 +83,12 @@ function expectedAccount(environment: ReadinessEnvironment): string {
   return environment.accountId;
 }
 
+/**
+ * @param command - Command to execute.
+ * @param runner - Command runner used for execution.
+ * @param failure - Error message used when the command fails.
+ * @returns The successful command result.
+ */
 function run(command: string[], runner: CommandRunner, failure: string): CommandResult {
   const result = runner.run(command);
   if (result.exitCode !== 0) {
@@ -68,6 +97,11 @@ function run(command: string[], runner: CommandRunner, failure: string): Command
   return result;
 }
 
+/**
+ * @param expected - Expected production AWS account identifier.
+ * @param runner - Command runner used to query AWS.
+ * @returns Nothing; throws when the active account differs.
+ */
 function assertActiveAccount(expected: string, runner: CommandRunner): void {
   const result = run(
     [
@@ -89,6 +123,10 @@ function assertActiveAccount(expected: string, runner: CommandRunner): void {
   }
 }
 
+/**
+ * @param runner - Command runner used to inspect the CDK bootstrap stack.
+ * @returns Nothing; throws when bootstrap is absent, changing, or unprotected.
+ */
 function assertBootstrapReady(runner: CommandRunner): void {
   const result = run(
     [
@@ -103,7 +141,7 @@ function assertBootstrapReady(runner: CommandRunner): void {
       "json",
     ],
     runner,
-    "CDK is not bootstrapped in us-east-1. Run CDK bootstrap before deploying Cipher.",
+    `CDK is not bootstrapped in ${productionRegion}. Run CDK bootstrap before deploying Cipher.`,
   );
 
   let stack: { EnableTerminationProtection?: unknown; StackStatus?: unknown } | undefined;
@@ -124,6 +162,11 @@ function assertBootstrapReady(runner: CommandRunner): void {
   }
 }
 
+/**
+ * @param expected - Expected production AWS account identifier.
+ * @param runner - Command runner used to synthesize the infrastructure.
+ * @returns Nothing; restores the caller's environment after synthesis.
+ */
 function synthesize(expected: string, runner: CommandRunner): void {
   const originalAccount = process.env.CDK_DEFAULT_ACCOUNT;
   const originalRegion = process.env.CIPHER_AWS_REGION;
@@ -149,6 +192,10 @@ function synthesize(expected: string, runner: CommandRunner): void {
   }
 }
 
+/**
+ * @param template - Synthesized CloudFormation template to inspect.
+ * @returns Resource types declared by the template.
+ */
 function resourceTypes(template: unknown): Set<string> {
   if (typeof template !== "object" || template === null || !("Resources" in template)) {
     throw new Error("A synthesized template does not contain resources.");
@@ -170,11 +217,12 @@ function resourceTypes(template: unknown): Set<string> {
   return types;
 }
 
+/**
+ * @param reader - Reader for synthesized CloudFormation templates.
+ * @returns Nothing; throws when a required stack resource is absent.
+ */
 async function assertStackShape(reader: TemplateReader): Promise<void> {
-  for (const [stack, requirements] of Object.entries(requiredResources) as [
-    StackName,
-    string[],
-  ][]) {
+  for (const [stack, requirements] of requiredResources) {
     const types = resourceTypes(await reader.read(`infra/cdk.out/${stack}.template.json`));
     const missing = requirements.filter((requirement) => !types.has(requirement));
     if (missing.length > 0) {
@@ -183,6 +231,14 @@ async function assertStackShape(reader: TemplateReader): Promise<void> {
   }
 }
 
+/**
+ * Verifies the AWS target, CDK bootstrap, synthesis, and required stack resources.
+ *
+ * @param environment - Expected production environment.
+ * @param runner - Command runner used for AWS and CDK operations.
+ * @param reader - Reader for synthesized CloudFormation templates.
+ * @returns Display-ready readiness results.
+ */
 export async function runReadinessCheck(
   environment: ReadinessEnvironment,
   runner: CommandRunner,

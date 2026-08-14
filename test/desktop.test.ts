@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { parseDesktopStatus } from "./desktop";
+import { parseDesktopStatus } from "../src/desktop";
 
 describe("parseDesktopStatus", () => {
   test("accepts a native desktop status", () => {

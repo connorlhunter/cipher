@@ -1,13 +1,23 @@
 {
   "compilerOptions": {
     "composite": true,
+    "jsx": "react-jsx",
     "lib": ["ES2023", "DOM"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,
+    "resolveJsonModule": true,
     "strict": true,
     "target": "ES2023",
     "types": ["bun"]
   },
-  "include": ["src/desktop.ts", "src/**/*.test.ts", "src/**/*.test.tsx"]
+  "include": [
+    "config/production.json",
+    "config/production.ts",
+    "scripts/infra-control.ts",
+    "scripts/infra-readiness.ts",
+    "src/desktop.ts",
+    "test/**/*.test.ts",
+    "test/**/*.test.tsx"
+  ]
 }

@@ -5,9 +5,9 @@ import {
   plannedCommands,
   runInfrastructureControl,
   type CommandRunner,
-} from "./infra-control";
+} from "../scripts/infra-control";
 
-const expectedAccount = "629577972102";
+const expectedAccount = "123456789012";
 
 function confirmation(action: "pause" | "resume" | "destroy-all"): string {
   const verb = action === "destroy-all" ? "UNLOCK" : action.toUpperCase();
