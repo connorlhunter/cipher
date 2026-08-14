@@ -11,6 +11,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: typescript
+        versions: [">= 7.0.0"]
     groups:
       frontend:
         patterns: ["*"]
