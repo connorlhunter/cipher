@@ -21,6 +21,9 @@ updates:
     directory: /infra
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: typescript
+        versions: [">= 7.0.0"]
     groups:
       infrastructure:
         patterns: ["*"]
