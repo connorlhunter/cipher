@@ -2,7 +2,15 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 const packageJsonPath = "package.json";
 const cargoTomlPath = "Cargo.toml";
+const cargoLockPath = "Cargo.lock";
 const tauriConfigPath = "src-tauri/tauri.conf.json";
+const workspaceCrates = ["cipher-desktop", "cipher-server", "cipher-test-support", "cipher-types"];
+const versionedPathDependencies = [
+  {
+    matcher: /(cipher-types = \{ path = "[^"]+", version = ")\^[^"]+(" \})/u,
+    path: "apps/cipher-server/Cargo.toml",
+  },
+] as const;
 
 /** Reads the canonical application release version from package.json. */
 function packageVersion(): string {
@@ -39,6 +47,17 @@ export function synchronizeReleaseVersion(checkOnly = false): void {
   const version = packageVersion();
   synchronizeVersion(cargoTomlPath, /^version = "[^"]+"/mu, `version = "${version}"`, checkOnly);
   synchronizeVersion(tauriConfigPath, /"version": "[^"]+"/u, `"version": "${version}"`, checkOnly);
+  for (const dependency of versionedPathDependencies) {
+    synchronizeVersion(dependency.path, dependency.matcher, `$1^${version}$2`, checkOnly);
+  }
+  for (const crate of workspaceCrates) {
+    synchronizeVersion(
+      cargoLockPath,
+      new RegExp(`(name = "${crate}"\\nversion = ")[^"]+(")`, "u"),
+      `$1${version}$2`,
+      checkOnly,
+    );
+  }
 }
 
 if (import.meta.main) {

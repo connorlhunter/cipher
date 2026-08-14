@@ -18,4 +18,4 @@ Dependabot branches are accepted as `dependabot/*`. These rules apply to new wor
 
 ## Releases
 
-`package.json` is the Cipher release-version source. Run `bun run version:sync` after changing it to update the Cargo workspace and Tauri metadata, then run `bun run version:check` before committing.
+`package.json` is the Cipher release-version source. Run `bun run version:sync` after changing it to update the Cargo workspace, lockfile, internal versioned path dependencies, and Tauri metadata, then run `bun run version:check` before committing.
