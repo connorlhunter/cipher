@@ -1,0 +1,20 @@
+[package]
+name = "cipher-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde.workspace = true
+tauri = { version = "2.11.5", features = [] }

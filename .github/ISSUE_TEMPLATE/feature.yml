@@ -1,0 +1,23 @@
+name: Feature
+description: Propose a focused product or engineering change.
+title: "Feature: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What should be possible when this is finished?
+    validations:
+      required: true
+  - type: textarea
+    id: reason
+    attributes:
+      label: Why is it needed?
+    validations:
+      required: true
+  - type: textarea
+    id: limits
+    attributes:
+      label: Limits or risks
+      description: Note any security, privacy, data, deployment, or compatibility effects.
