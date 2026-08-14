@@ -22,6 +22,7 @@
     "infra:install": "npm --prefix infra ci",
     "infra:destroy-all": "bun scripts/infra-control.ts destroy-all",
     "infra:pause": "bun scripts/infra-control.ts pause",
+    "infra:readiness": "bun scripts/infra-readiness.ts",
     "infra:resume": "bun scripts/infra-control.ts resume",
     "infra:synth": "npm --prefix infra run synth",
     "lint": "bun x eslint . && cargo clippy --workspace --all-targets -- -D warnings",
