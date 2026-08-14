@@ -26,7 +26,7 @@ jobs:
       - run: cargo deny check
       - run: bun x prettier --check . --ignore-unknown
       - run: bun x eslint .
-      - run: bun run typecheck
+      - run: bun x tsgo --build --pretty false
       - run: bun run test:frontend
       - run: bun run web:build
 
@@ -46,7 +46,9 @@ jobs:
       - run: bun run toolchain:check
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+      - run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
       - run: cargo test --workspace --locked
       - run: cargo build --workspace --release --locked
       - run: bun run desktop:build
@@ -54,7 +56,7 @@ jobs:
   infrastructure:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 24
