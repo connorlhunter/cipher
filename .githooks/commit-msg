@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+set -eu
+
+bun scripts/change-naming.ts --commit-message-file "$1"

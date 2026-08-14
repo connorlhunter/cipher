@@ -1,6 +1,6 @@
 name: Feature
 description: Propose a focused product or engineering change.
-title: "Feature: "
+title: "feat: "
 labels: [enhancement]
 body:
   - type: textarea
