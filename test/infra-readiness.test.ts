@@ -21,7 +21,19 @@ const completeTemplates: Record<string, unknown> = {
     Resources: {
       UserPool: { Type: "AWS::Cognito::UserPool" },
       Users: { Type: "AWS::DynamoDB::Table" },
+      Conversations: { Type: "AWS::DynamoDB::Table" },
+      Messages: { Type: "AWS::DynamoDB::Table" },
+      MediaTable: { Type: "AWS::DynamoDB::Table" },
       Media: { Type: "AWS::S3::Bucket" },
+    },
+    Outputs: {
+      CognitoUserPoolId: {},
+      CognitoUserPoolClientId: {},
+      UsersTableName: {},
+      ConversationsTableName: {},
+      MessagesTableName: {},
+      MediaTableName: {},
+      MediaBucketName: {},
     },
   },
   "infra/cdk.out/CipherProductionControl.template.json": {
@@ -98,7 +110,7 @@ describe("infrastructure readiness", () => {
       [
         "AWS account 123456789012 and us-east-1 are ready.",
         "CDK bootstrap is ready.",
-        "All required Cipher stack resources are present in the synthesized templates.",
+        "All required Cipher stack contracts are satisfied in the synthesized templates.",
       ],
     );
 
@@ -147,5 +159,33 @@ describe("infrastructure readiness", () => {
     await expect(
       runReadinessCheck({ accountId }, runner, createReader(incompleteTemplates), config),
     ).rejects.toThrow("CipherProductionRuntime is not ready. Missing: AWS::ECS::Service.");
+  });
+
+  test("requires the exact state resource counts", async () => {
+    const incompleteTemplates = structuredClone(completeTemplates);
+    const state = incompleteTemplates["infra/cdk.out/CipherProductionState.template.json"] as {
+      Resources: Record<string, unknown>;
+    };
+    state.Resources.ExtraTable = { Type: "AWS::DynamoDB::Table" };
+    const { runner } = createRunner();
+
+    await expect(
+      runReadinessCheck({ accountId }, runner, createReader(incompleteTemplates), config),
+    ).rejects.toThrow(
+      "CipherProductionState is not ready. State resource counts must match: AWS::DynamoDB::Table: expected 4, found 5.",
+    );
+  });
+
+  test("requires the state outputs used for runtime configuration", async () => {
+    const incompleteTemplates = structuredClone(completeTemplates);
+    const state = incompleteTemplates["infra/cdk.out/CipherProductionState.template.json"] as {
+      Outputs: Record<string, unknown>;
+    };
+    delete state.Outputs.MediaBucketName;
+    const { runner } = createRunner();
+
+    await expect(
+      runReadinessCheck({ accountId }, runner, createReader(incompleteTemplates), config),
+    ).rejects.toThrow("CipherProductionState is not ready. Missing outputs: MediaBucketName.");
   });
 });
