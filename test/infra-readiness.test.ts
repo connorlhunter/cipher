@@ -107,6 +107,7 @@ describe("infrastructure readiness", () => {
       ["aws", "cloudformation", "describe-stacks"],
       ["npm", "--prefix", "infra"],
     ]);
+    expect(calls[2]).toEqual(["npm", "--prefix", "infra", "run", "synth"]);
   });
 
   test("stops before synthesis when the active account is wrong", async () => {
