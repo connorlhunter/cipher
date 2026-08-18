@@ -12,6 +12,7 @@
   },
   "include": [
     "config/environment.ts",
+    "scripts/build-server-image.ts",
     "scripts/change-naming.ts",
     "scripts/infra-control.ts",
     "scripts/infra-readiness.ts",
