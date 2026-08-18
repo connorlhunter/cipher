@@ -19,3 +19,19 @@ Dependabot branches are accepted as `dependabot/*`. These rules apply to new wor
 ## Releases
 
 `package.json` is the Cipher release-version source. Run `bun run version:sync` after changing it to update the Cargo workspace, lockfile, internal versioned path dependencies, and Tauri metadata, then run `bun run version:check` before committing.
+
+## State-stack configuration
+
+After `CipherProductionState` is deployed, use its outputs to replace these ignored `.env` placeholders:
+
+- `CognitoUserPoolId` → `CIPHER_COGNITO_USER_POOL_ID`
+- `CognitoUserPoolClientId` → `CIPHER_COGNITO_CLIENT_ID`
+- `UsersTableName` → `CIPHER_USERS_TABLE`
+- `ConversationsTableName` → `CIPHER_CONVERSATIONS_TABLE`
+- `MessagesTableName` → `CIPHER_MESSAGES_TABLE`
+- `MediaTableName` → `CIPHER_MEDIA_TABLE`
+- `MediaBucketName` → `CIPHER_MEDIA_BUCKET`
+
+`MediaPendingPrefix`, `MediaReadyPrefix`, and `MediaFixturePrefix` describe the S3 key roots enforced by the state stack. They are runtime workflow inputs once media commands and live fixture checks are implemented.
+
+The state policy enforces TLS, SSE-S3, and those key roots. A later signed upload command must bind the SHA-256 checksum header, then verify it with `HeadObject`; S3 does not expose that checksum header as a bucket-policy condition key.

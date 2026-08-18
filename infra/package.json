@@ -7,6 +7,7 @@
   },
   "scripts": {
     "synth": "cdk synth",
+    "test": "tsx --test test/*.test.ts",
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "devDependencies": {

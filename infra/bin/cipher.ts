@@ -1,6 +1,7 @@
 /** Defines Cipher's four production CloudFormation stack boundaries. */
 import * as cdk from "aws-cdk-lib";
 import { loadInfrastructureConfig } from "../../config/environment.js";
+import { addStateFoundations } from "../lib/state-foundations.js";
 
 const config = loadInfrastructureConfig(process.env);
 const account = process.env.CDK_DEFAULT_ACCOUNT;
@@ -20,6 +21,7 @@ const state = new cdk.Stack(app, config.stacks.state, {
   env: environment,
   terminationProtection: !allowPersistentDestruction,
 });
+addStateFoundations(state);
 
 const control = new cdk.Stack(app, config.stacks.control, {
   description: "Cipher production image, deployment identity, and retained operations data.",
