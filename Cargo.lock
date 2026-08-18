@@ -378,7 +378,7 @@ dependencies = [
 
 [[package]]
 name = "cipher-desktop"
-version = "0.1.0-prealpha.1"
+version = "0.1.0-prealpha.2"
 dependencies = [
  "serde",
  "tauri",
@@ -387,7 +387,7 @@ dependencies = [
 
 [[package]]
 name = "cipher-server"
-version = "0.1.0-prealpha.1"
+version = "0.1.0-prealpha.2"
 dependencies = [
  "axum",
  "cipher-types",
@@ -400,11 +400,11 @@ dependencies = [
 
 [[package]]
 name = "cipher-test-support"
-version = "0.1.0-prealpha.1"
+version = "0.1.0-prealpha.2"
 
 [[package]]
 name = "cipher-types"
-version = "0.1.0-prealpha.1"
+version = "0.1.0-prealpha.2"
 dependencies = [
  "serde",
 ]
