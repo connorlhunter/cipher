@@ -176,7 +176,7 @@ function synthesize(expected: string, runner: CommandRunner, config: Infrastruct
   process.env.CIPHER_AWS_REGION = config.awsRegion;
   try {
     run(
-      ["npm", "--prefix", "infra", "exec", "cdk", "--", "synth"],
+      ["npm", "--prefix", "infra", "run", "synth"],
       runner,
       "Cipher infrastructure could not be synthesized.",
     );
