@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.0-prealpha.2] - 2026-08-18
+
+### Added
+
+- Production State-stack foundations for invite-only Cognito, four DynamoDB tables, and private encrypted media storage.
+- Exact State-stack readiness checks, stable resource names, and a non-root Rust server container foundation.
+- Dedicated Rust test modules and a published TypeScript coverage report.
+
+### Changed
+
+- Local readiness now validates the State stack's required resources and runtime outputs before deployment steps continue.
+- Project documentation and diagrams distinguish deployed State foundations from the remaining Control, Network, Runtime, and application work.
+
+### Known limits
+
+- Control, Network, and Runtime stacks, authenticated application flows, durable messaging, and live operational drills remain incomplete.
+
 ## [0.1.0-prealpha.1] - 2026-08-14
 
 ### Added
