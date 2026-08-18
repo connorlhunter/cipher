@@ -82,6 +82,7 @@ describe("Cipher state foundations", () => {
       RecoveryMechanisms: [{ Name: "verified_email", Priority: 1 }],
     });
     assert.deepEqual(pool.UsernameAttributes, ["email"]);
+    assert.equal(pool.UserPoolName, "cipher-production-users");
     assert.deepEqual(pool.Policies, {
       PasswordPolicy: {
         MinimumLength: 12,
@@ -103,6 +104,7 @@ describe("Cipher state foundations", () => {
     assert.equal(client.AccessTokenValidity, 60);
     assert.equal(client.IdTokenValidity, 60);
     assert.equal(client.RefreshTokenValidity, 43200);
+    assert.equal(client.ClientName, "cipher-production-desktop");
   });
 
   test("synthesizes only the documented tables, keys, and indexes with protected data controls", () => {
@@ -137,7 +139,14 @@ describe("Cipher state foundations", () => {
         { AttributeName: "pk", KeyType: "HASH" },
         { AttributeName: "sk", KeyType: "RANGE" },
       ]);
-      assert.equal("TableName" in tableProperties, false);
+      assert.ok(
+        [
+          "cipher-production-users",
+          "cipher-production-conversations",
+          "cipher-production-messages",
+          "cipher-production-media",
+        ].includes(tableProperties.TableName as string),
+      );
     }
 
     assert.deepEqual(secondaryIndexes(users), []);
@@ -179,6 +188,12 @@ describe("Cipher state foundations", () => {
 
     assert.equal(bucket.DeletionPolicy, "Retain");
     assert.equal(bucket.UpdateReplacePolicy, "Retain");
+    assert.deepEqual(bucketProperties.BucketName, {
+      "Fn::Join": [
+        "",
+        ["cipher-production-media-", { Ref: "AWS::AccountId" }, "-", { Ref: "AWS::Region" }],
+      ],
+    });
     assert.deepEqual(bucketProperties.PublicAccessBlockConfiguration, {
       BlockPublicAcls: true,
       BlockPublicPolicy: true,

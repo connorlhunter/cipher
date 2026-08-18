@@ -25,6 +25,16 @@ const expiresAt = "expires_at";
 const pointInTimeRecoveryDays = 35;
 const pendingObjectLifetime = cdk.Duration.days(1);
 const fixtureObjectLifetime = cdk.Duration.days(7);
+const productionResourcePrefix = "cipher-production";
+
+const resourceNames = {
+  conversationsTable: `${productionResourcePrefix}-conversations`,
+  mediaBucket: `${productionResourcePrefix}-media-${cdk.Aws.ACCOUNT_ID}-${cdk.Aws.REGION}`,
+  mediaTable: `${productionResourcePrefix}-media`,
+  nativeClient: `${productionResourcePrefix}-desktop`,
+  userPool: `${productionResourcePrefix}-users`,
+  usersTable: `${productionResourcePrefix}-users`,
+} as const;
 
 /** Persistent resources that later stacks and runtime configuration consume. */
 export interface StateFoundations {
@@ -69,6 +79,7 @@ export function addStateFoundations(stack: cdk.Stack): StateFoundations {
     selfSignUpEnabled: false,
     signInAliases: { email: true },
     standardAttributes: { email: { mutable: true, required: true } },
+    userPoolName: resourceNames.userPool,
   });
 
   const userPoolClient = userPool.addClient("NativePublicClient", {
@@ -81,24 +92,25 @@ export function addStateFoundations(stack: cdk.Stack): StateFoundations {
     preventUserExistenceErrors: true,
     refreshTokenValidity: cdk.Duration.days(30),
     supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO],
+    userPoolClientName: resourceNames.nativeClient,
   });
 
-  const usersTable = createTable(stack, "Users");
-  const conversationsTable = createTable(stack, "Conversations");
+  const usersTable = createTable(stack, "Users", resourceNames.usersTable);
+  const conversationsTable = createTable(stack, "Conversations", resourceNames.conversationsTable);
   conversationsTable.addGlobalSecondaryIndex({
     indexName: "GSI1",
     partitionKey: { name: tableKeys.firstIndexPartition, type: dynamodb.AttributeType.STRING },
     sortKey: { name: tableKeys.firstIndexSort, type: dynamodb.AttributeType.STRING },
   });
 
-  const messagesTable = createTable(stack, "Messages");
+  const messagesTable = createTable(stack, "Messages", `${productionResourcePrefix}-messages`);
   messagesTable.addGlobalSecondaryIndex({
     indexName: "GSI1",
     partitionKey: { name: tableKeys.firstIndexPartition, type: dynamodb.AttributeType.STRING },
     sortKey: { name: tableKeys.firstIndexSort, type: dynamodb.AttributeType.STRING },
   });
 
-  const mediaTable = createTable(stack, "Media");
+  const mediaTable = createTable(stack, "Media", resourceNames.mediaTable);
   mediaTable.addGlobalSecondaryIndex({
     indexName: "GSI1",
     partitionKey: { name: tableKeys.firstIndexPartition, type: dynamodb.AttributeType.STRING },
@@ -111,6 +123,7 @@ export function addStateFoundations(stack: cdk.Stack): StateFoundations {
   });
 
   const mediaBucket = new s3.Bucket(stack, "MediaBucket", {
+    bucketName: resourceNames.mediaBucket,
     blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
     encryption: s3.BucketEncryption.S3_MANAGED,
     enforceSSL: true,
@@ -157,9 +170,10 @@ export function addStateFoundations(stack: cdk.Stack): StateFoundations {
 /**
  * @param stack - Stack owning the table.
  * @param id - Stable construct identifier.
+ * @param tableName - Stable production name for the table.
  * @returns An on-demand, encrypted, protected table with TTL enabled.
  */
-function createTable(stack: cdk.Stack, id: string): dynamodb.Table {
+function createTable(stack: cdk.Stack, id: string, tableName: string): dynamodb.Table {
   return new dynamodb.Table(stack, id, {
     billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
     deletionProtection: true,
@@ -171,6 +185,7 @@ function createTable(stack: cdk.Stack, id: string): dynamodb.Table {
     },
     removalPolicy: cdk.RemovalPolicy.RETAIN,
     sortKey: { name: tableKeys.sort, type: dynamodb.AttributeType.STRING },
+    tableName,
     timeToLiveAttribute: expiresAt,
   });
 }
