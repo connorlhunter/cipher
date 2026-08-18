@@ -43,3 +43,5 @@ After `CipherProductionState` is deployed, use its outputs to replace these igno
 The state policy enforces TLS, SSE-S3, and those key roots. A later signed upload command must bind the SHA-256 checksum header, then verify it with `HeadObject`; S3 does not expose that checksum header as a bucket-policy condition key.
 
 `bun run infra:readiness` requires exactly one Cognito pool, four DynamoDB tables, one S3 bucket, and the seven configuration outputs above in the synthesized state stack. It retains presence-only checks for the control, network, and runtime stacks while those foundations are completed.
+
+State resources use stable `cipher-production-*` names. The media bucket includes the account and region because S3 bucket names are global; the stack outputs remain the source for runtime configuration.
