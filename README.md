@@ -16,6 +16,12 @@ Release branches use `release/<version>`, release-preparation commits use `chore
 
 Dependabot branches are accepted as `dependabot/*`. These rules apply to new work; existing Git history remains unchanged.
 
+## Server container
+
+- Build the server image with `bun run server:image`. The script reads the pinned Rust version from `rust-toolchain.toml`; the multi-stage build produces only the release `cipher-server` binary and runs it as an unprivileged user.
+- The image defaults `CIPHER_SERVER_BIND` to `0.0.0.0:3000`. Local runs use the loopback value in `.env.example`; ECS task definitions must set `CIPHER_SERVER_BIND=0.0.0.0:3000`.
+- Supply the remaining required `CIPHER_*` settings at runtime from the deployment configuration. Do not bake `.env` files, production endpoints, AWS identifiers, or secrets into the image; deployed resource values come from the production stack outputs.
+
 ## Releases
 
 `package.json` is the Cipher release-version source. Run `bun run version:sync` after changing it to update the Cargo workspace, lockfile, internal versioned path dependencies, and Tauri metadata, then run `bun run version:check` before committing.

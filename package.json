@@ -33,6 +33,7 @@
     "naming:check": "bun scripts/change-naming.ts --branch",
     "prepare": "bun scripts/setup-git-hooks.ts",
     "server:dev": "cargo run --locked -p cipher-server",
+    "server:image": "bun scripts/build-server-image.ts",
     "test": "bun run test:frontend && bun run test:infra && bun run test:rust",
     "test:frontend": "bun test test/*.test.ts",
     "test:infra": "npm --prefix infra run test",

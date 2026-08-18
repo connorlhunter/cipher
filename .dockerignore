@@ -1,0 +1,12 @@
+.git
+.github
+.codeql
+.env*
+.DS_Store
+coverage
+dist
+node_modules
+target
+src-tauri/target
+infra/cdk.out
+infra/node_modules
