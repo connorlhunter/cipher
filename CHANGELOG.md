@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.0-prealpha.3] - 2026-08-20
+
+### Added
+
+- Publish downloadable overview and TypeScript coverage PDFs alongside their HTML reports.
+
+### Changed
+
+- Stamp every Cipher coverage page with one project-owned UTC publication timestamp.
+- Render both PDFs from the exact stamped HTML before syncing only Cipher's coverage prefix.
+
+### Known limits
+
+- Control, Network, and Runtime stacks, authenticated application flows, durable messaging, and live operational drills remain incomplete.
+
 ## [0.1.0-prealpha.2] - 2026-08-18
 
 ### Added
