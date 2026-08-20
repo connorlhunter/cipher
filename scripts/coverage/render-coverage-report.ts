@@ -95,13 +95,10 @@ export function coverageUpdatedAt(value: string): string {
  * Formats the publication timestamp shown on every coverage page.
  *
  * @param value - Canonical ISO UTC timestamp.
- * @returns Human-readable UTC timestamp.
+ * @returns Human-readable UTC date.
  */
 function coverageUpdatedAtLabel(value: string): string {
   const date = new Date(value);
-  const hours = date.getUTCHours();
-  const hour = hours % 12 || 12;
-  const minute = String(date.getUTCMinutes()).padStart(2, "0");
   const month = [
     "Jan",
     "Feb",
@@ -116,9 +113,8 @@ function coverageUpdatedAtLabel(value: string): string {
     "Nov",
     "Dec",
   ][date.getUTCMonth()];
-  const period = hours < 12 ? "AM" : "PM";
 
-  return `${month} ${date.getUTCDate()}, ${date.getUTCFullYear()} at ${hour}:${minute} ${period} UTC`;
+  return `${month} ${date.getUTCDate()}, ${date.getUTCFullYear()}`;
 }
 
 const coverageThemeSchemes = {
