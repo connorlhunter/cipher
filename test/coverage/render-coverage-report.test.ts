@@ -32,13 +32,13 @@ test("renders labeled coverage pages from Bun LCOV output", () => {
   const index = readFileSync(join(directory, "coverage", "index.html"), "utf8");
   const typeScript = readFileSync(join(directory, "coverage", "typescript", "index.html"), "utf8");
   expect(index).toContain("TypeScript");
-  expect(index).toContain(
-    'Updated <time datetime="2026-08-20T18:42:31.123Z">Aug 20, 2026 at 6:42 PM UTC</time>',
-  );
+  expect(index).toContain('Updated <time datetime="2026-08-20T18:42:31.123Z">Aug 20, 2026</time>');
   expect(index).toContain("connorhunter.theme.scheme");
   expect(index).toContain('aria-current="page"');
   expect(typeScript).toContain("75.00% (3/4)");
-  expect(typeScript).toContain('datetime="2026-08-20T18:42:31.123Z"');
+  expect(typeScript).toContain(
+    'Updated <time datetime="2026-08-20T18:42:31.123Z">Aug 20, 2026</time>',
+  );
   expect(typeScript).toContain('href="../index.html"');
 });
 

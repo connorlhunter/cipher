@@ -26,7 +26,9 @@ describe("prepareCoveragePublication", () => {
       renderPdfs: async (workspaceRoot) => {
         const paths = coveragePaths(workspaceRoot);
         for (const path of [paths.overview.html, paths.typescript.html]) {
-          expect(readFileSync(path, "utf8")).toContain('datetime="2026-08-20T18:42:31.123Z"');
+          expect(readFileSync(path, "utf8")).toContain(
+            'Updated <time datetime="2026-08-20T18:42:31.123Z">Aug 20, 2026</time>',
+          );
         }
         for (const path of [paths.overview.pdf, paths.typescript.pdf]) {
           writeFileSync(path, "%PDF-1.4");
@@ -37,7 +39,9 @@ describe("prepareCoveragePublication", () => {
 
     expect(result.updatedAt).toBe("2026-08-20T18:42:31.123Z");
     for (const path of Object.values(result.html)) {
-      expect(readFileSync(path, "utf8")).toContain('datetime="2026-08-20T18:42:31.123Z"');
+      expect(readFileSync(path, "utf8")).toContain(
+        'Updated <time datetime="2026-08-20T18:42:31.123Z">Aug 20, 2026</time>',
+      );
     }
     for (const path of Object.values(result.pdf)) {
       expect(readFileSync(path).subarray(0, 4).toString()).toBe("%PDF");
