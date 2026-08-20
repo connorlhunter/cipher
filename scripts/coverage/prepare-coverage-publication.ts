@@ -1,5 +1,9 @@
 import { coveragePaths } from "./coverage-paths";
-import { renderCoveragePdfs, type RenderedCoveragePdfs } from "./render-coverage-pdf";
+import {
+  renderCoveragePdfs,
+  type RenderedCoveragePdfs,
+  type RenderCoveragePdfsOptions,
+} from "./render-coverage-pdf";
 import { coverageUpdatedAt, renderCoverageReport } from "./render-coverage-report";
 
 /** Files and timestamp prepared immediately before coverage publication. */
@@ -12,6 +16,14 @@ export interface PreparedCoveragePublication {
   readonly updatedAt: string;
 }
 
+/** Optional collaborators for coverage publication preparation. */
+export interface PrepareCoveragePublicationOptions {
+  readonly renderPdfs?: (
+    workspaceRoot?: string,
+    options?: RenderCoveragePdfsOptions,
+  ) => Promise<RenderedCoveragePdfs>;
+}
+
 /**
  * Stamps every Cipher coverage page and renders matching PDFs.
  *
@@ -22,11 +34,12 @@ export interface PreparedCoveragePublication {
 export async function prepareCoveragePublication(
   workspaceRoot = process.cwd(),
   updatedAt = new Date().toISOString(),
+  options: PrepareCoveragePublicationOptions = {},
 ): Promise<PreparedCoveragePublication> {
   const paths = coveragePaths(workspaceRoot);
   const publicationDate = coverageUpdatedAt(updatedAt);
   renderCoverageReport(paths.lcov, paths.directory, publicationDate);
-  const pdf = await renderCoveragePdfs(workspaceRoot);
+  const pdf = await (options.renderPdfs ?? renderCoveragePdfs)(workspaceRoot);
 
   console.log(`Prepared coverage publication: ${publicationDate}`);
 

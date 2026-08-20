@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
-import puppeteer, { type Browser } from "puppeteer";
+import puppeteer from "puppeteer";
 import { coveragePaths } from "./coverage-paths";
 import { pdfBrowserLaunchOptions } from "./pdf-browser";
 
@@ -9,6 +9,42 @@ import { pdfBrowserLaunchOptions } from "./pdf-browser";
 export interface RenderedCoveragePdfs {
   readonly overview: string;
   readonly typescript: string;
+}
+
+/** Narrow PDF options needed by the coverage renderer. */
+export interface CoveragePdfOptions {
+  readonly format?: "Letter";
+  readonly landscape?: boolean;
+  readonly margin?: {
+    readonly bottom?: string;
+    readonly left?: string;
+    readonly right?: string;
+    readonly top?: string;
+  };
+  readonly path?: string;
+  readonly printBackground?: boolean;
+}
+
+/** Page operations used while printing a coverage report. */
+export interface CoveragePdfPage {
+  close(): Promise<void>;
+  emulateMediaType(type?: string): Promise<void>;
+  goto(url: string, options?: { readonly waitUntil?: "networkidle0" }): Promise<unknown>;
+  pdf(options?: CoveragePdfOptions): Promise<Uint8Array>;
+}
+
+/** Browser operations used while printing coverage reports. */
+export interface CoveragePdfBrowser {
+  close(): Promise<void>;
+  newPage(): Promise<CoveragePdfPage>;
+}
+
+/** Opens the browser used to print coverage reports. */
+export type CoveragePdfBrowserLauncher = () => Promise<CoveragePdfBrowser>;
+
+/** Optional collaborators for PDF rendering. */
+export interface RenderCoveragePdfsOptions {
+  readonly launchBrowser?: CoveragePdfBrowserLauncher;
 }
 
 /**
@@ -19,6 +55,7 @@ export interface RenderedCoveragePdfs {
  */
 export async function renderCoveragePdfs(
   workspaceRoot = process.cwd(),
+  options: RenderCoveragePdfsOptions = {},
 ): Promise<RenderedCoveragePdfs> {
   const paths = coveragePaths(workspaceRoot);
 
@@ -28,7 +65,10 @@ export async function renderCoveragePdfs(
     }
   }
 
-  const browser = await puppeteer.launch(pdfBrowserLaunchOptions(process.env.CI === "true"));
+  const launchBrowser =
+    options.launchBrowser ??
+    (() => puppeteer.launch(pdfBrowserLaunchOptions(process.env.CI === "true")));
+  const browser = await launchBrowser();
 
   try {
     await renderPdf(browser, paths.overview.html, paths.overview.pdf);
@@ -49,7 +89,11 @@ export async function renderCoveragePdfs(
  * @param input - HTML report path.
  * @param output - PDF destination.
  */
-async function renderPdf(browser: Browser, input: string, output: string): Promise<void> {
+async function renderPdf(
+  browser: CoveragePdfBrowser,
+  input: string,
+  output: string,
+): Promise<void> {
   mkdirSync(dirname(output), { recursive: true });
   const page = await browser.newPage();
 

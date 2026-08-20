@@ -98,16 +98,27 @@ export function coverageUpdatedAt(value: string): string {
  * @returns Human-readable UTC timestamp.
  */
 function coverageUpdatedAtLabel(value: string): string {
-  const label = new Intl.DateTimeFormat("en-US", {
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    month: "short",
-    timeZone: "UTC",
-    year: "numeric",
-  }).format(new Date(value));
+  const date = new Date(value);
+  const hours = date.getUTCHours();
+  const hour = hours % 12 || 12;
+  const minute = String(date.getUTCMinutes()).padStart(2, "0");
+  const month = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ][date.getUTCMonth()];
+  const period = hours < 12 ? "AM" : "PM";
 
-  return `${label} UTC`;
+  return `${month} ${date.getUTCDate()}, ${date.getUTCFullYear()} at ${hour}:${minute} ${period} UTC`;
 }
 
 const coverageThemeSchemes = {
