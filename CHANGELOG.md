@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.0-prealpha.4] - 2026-08-20
+
+### Changed
+
+- Simplified the published coverage update label to display the project publication date without a time or UTC suffix.
+
+### Known limits
+
+- Control, Network, and Runtime stacks, authenticated application flows, durable messaging, and live operational drills remain incomplete.
+
 ## [0.1.0-prealpha.3] - 2026-08-20
 
 ### Added
