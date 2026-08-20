@@ -43,12 +43,14 @@ export function parseLcov(lcov: string): CoverageFile[] {
 export function renderCoverageReport(
   lcovPath = join("coverage", "lcov.info"),
   outputRoot = "coverage",
+  updatedAt = new Date().toISOString(),
 ): void {
   const files = parseLcov(readFileSync(lcovPath, "utf8"));
+  const publicationDate = coverageUpdatedAt(updatedAt);
   const reportPath = join(outputRoot, "typescript", "index.html");
   mkdirSync(dirname(reportPath), { recursive: true });
-  writeFileSync(reportPath, reportHtml(files));
-  writeFileSync(join(outputRoot, "index.html"), indexHtml());
+  writeFileSync(reportPath, reportHtml(files, publicationDate));
+  writeFileSync(join(outputRoot, "index.html"), indexHtml(publicationDate));
 }
 
 function value(line: string): number {
@@ -71,6 +73,52 @@ function total(files: CoverageFile[], key: "functions" | "lines"): CoverageMetri
 
 function html(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+/**
+ * Normalizes a project-owned coverage publication time to ISO UTC.
+ *
+ * @param value - Candidate timestamp.
+ * @returns Canonical ISO UTC timestamp.
+ */
+export function coverageUpdatedAt(value: string): string {
+  const timestamp = new Date(value);
+
+  if (Number.isNaN(timestamp.getTime())) {
+    throw new Error(`Invalid coverage publication date: ${value}`);
+  }
+
+  return timestamp.toISOString();
+}
+
+/**
+ * Formats the publication timestamp shown on every coverage page.
+ *
+ * @param value - Canonical ISO UTC timestamp.
+ * @returns Human-readable UTC timestamp.
+ */
+function coverageUpdatedAtLabel(value: string): string {
+  const date = new Date(value);
+  const hours = date.getUTCHours();
+  const hour = hours % 12 || 12;
+  const minute = String(date.getUTCMinutes()).padStart(2, "0");
+  const month = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ][date.getUTCMonth()];
+  const period = hours < 12 ? "AM" : "PM";
+
+  return `${month} ${date.getUTCDate()}, ${date.getUTCFullYear()} at ${hour}:${minute} ${period} UTC`;
 }
 
 const coverageThemeSchemes = {
@@ -191,23 +239,24 @@ function themeScript(): string {
   return `<script>(() => { const schemes = new Set(["atlas", "paper", "citrine", "harbor", "midnight", "onyx", "rose", "tide", "ember", "quartz"]); const keys = ["connorhunter.theme.scheme", "portfolio.theme.scheme"]; const fallback = window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "midnight" : "atlas"; let scheme; for (const key of keys) { try { const value = localStorage.getItem(key); if (schemes.has(value)) { scheme = value; break; } } catch {} } document.documentElement.dataset.scheme = scheme || fallback; window.addEventListener("message", (event) => { const message = event.data; if (!message || typeof message !== "object" || !schemes.has(message.scheme) || (typeof message.type === "string" && !message.type.endsWith(".theme.scheme"))) return; document.documentElement.dataset.scheme = message.scheme; }); })();</script>`;
 }
 
-function page(title: string, content: string, indexHref: string): string {
+function page(title: string, content: string, indexHref: string, updatedAt: string): string {
   const typeScriptHref = indexHref === "index.html" ? "typescript/index.html" : "index.html";
   return `<!doctype html>
 <html data-scheme="atlas" lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title>
-<style>${themeCss()}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:.9375rem/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{width:min(100%,72rem);margin:0 auto;padding:clamp(1.25rem,4vw,3rem)}header{margin-bottom:1.25rem}h1{margin:0;font-size:clamp(1.75rem,4vw,2.75rem);line-height:1.05}p{margin:.5rem 0 0;color:var(--muted)}a{color:var(--accent);font-weight:700;text-underline-offset:.2em}nav{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.25rem}nav a{border:1px solid var(--border);border-radius:999px;background:var(--panel);padding:.45rem .75rem;text-decoration:none}nav a[aria-current="page"]{border-color:var(--accent);background:var(--accent-soft)}.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:.5rem;background:var(--panel)}table{width:100%;min-width:36rem;border-collapse:collapse}th,td{border-bottom:1px solid var(--border);padding:.85rem 1rem;text-align:left;vertical-align:top}thead th{color:var(--muted);font-size:.75rem;letter-spacing:.04em;text-transform:uppercase}tbody tr:first-child{background:color-mix(in srgb,var(--accent) 10%,transparent);font-weight:800}tbody tr:last-child th,tbody tr:last-child td{border-bottom:0}@media(max-width:600px){main{padding:1.25rem .75rem}table{min-width:31rem}th,td{padding:.7rem .75rem}}</style>${themeScript()}</head>
-<body><main><nav aria-label="Coverage pages"><a ${indexHref === "index.html" ? 'aria-current="page"' : ""} href="${indexHref}">Overview</a><a ${indexHref === "index.html" ? "" : 'aria-current="page"'} href="${typeScriptHref}">TypeScript</a></nav>${content}</main></body></html>`;
+<style>${themeCss()}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:.9375rem/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{width:min(100%,72rem);margin:0 auto;padding:clamp(1.25rem,4vw,3rem)}header{margin-bottom:1.25rem}h1{margin:0;font-size:clamp(1.75rem,4vw,2.75rem);line-height:1.05}p{margin:.5rem 0 0;color:var(--muted)}a{color:var(--accent);font-weight:700;text-underline-offset:.2em}nav{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem}nav a{border:1px solid var(--border);border-radius:999px;background:var(--panel);padding:.45rem .75rem;text-decoration:none}nav a[aria-current="page"]{border-color:var(--accent);background:var(--accent-soft)}.coverage-updated{margin:0 0 1.25rem;color:var(--muted);font-size:.8rem;font-weight:700}.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:.5rem;background:var(--panel)}table{width:100%;min-width:36rem;border-collapse:collapse}th,td{border-bottom:1px solid var(--border);padding:.85rem 1rem;text-align:left;vertical-align:top}thead th{color:var(--muted);font-size:.75rem;letter-spacing:.04em;text-transform:uppercase}tbody tr:first-child{background:color-mix(in srgb,var(--accent) 10%,transparent);font-weight:800}tbody tr:last-child th,tbody tr:last-child td{border-bottom:0}@media(max-width:600px){main{padding:1.25rem .75rem}table{min-width:31rem}th,td{padding:.7rem .75rem}}</style>${themeScript()}</head>
+<body><main><nav aria-label="Coverage pages"><a ${indexHref === "index.html" ? 'aria-current="page"' : ""} href="${indexHref}">Overview</a><a ${indexHref === "index.html" ? "" : 'aria-current="page"'} href="${typeScriptHref}">TypeScript</a></nav><p class="coverage-updated">Updated <time datetime="${html(updatedAt)}">${html(coverageUpdatedAtLabel(updatedAt))}</time></p>${content}</main></body></html>`;
 }
 
-function indexHtml(): string {
+function indexHtml(updatedAt: string): string {
   return page(
     "Cipher coverage",
     '<header><h1>Cipher coverage</h1><p>Available reports are grouped by code surface.</p></header><div class="table-wrap"><table><thead><tr><th>Page</th><th>Scope</th></tr></thead><tbody><tr><td><a href="typescript/index.html">TypeScript</a></td><td>Desktop UI, tooling, and infrastructure scripts</td></tr><tr><td>Rust</td><td>Coverage tooling is not selected yet.</td></tr></tbody></table></div>',
     "index.html",
+    updatedAt,
   );
 }
 
-function reportHtml(files: CoverageFile[]): string {
+function reportHtml(files: CoverageFile[], updatedAt: string): string {
   const rows = files
     .sort((left, right) => left.path.localeCompare(right.path))
     .map(
@@ -221,6 +270,7 @@ function reportHtml(files: CoverageFile[]): string {
     "Cipher TypeScript coverage",
     `<header><h1>TypeScript coverage</h1><p>Generated from the Bun test suite.</p></header><div class="table-wrap"><table><thead><tr><th>File</th><th>Lines</th><th>Functions</th></tr></thead><tbody><tr><th>All files</th><td>${percent(lines)}% (${lines.covered}/${lines.found})</td><td>${percent(functions)}% (${functions.covered}/${functions.found})</td></tr>${rows}</tbody></table></div>`,
     "../index.html",
+    updatedAt,
   );
 }
 

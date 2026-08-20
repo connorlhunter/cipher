@@ -6,6 +6,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,
+    "skipLibCheck": true,
     "strict": true,
     "target": "ES2023",
     "types": ["bun"]
@@ -14,7 +15,8 @@
     "config/environment.ts",
     "scripts/build-server-image.ts",
     "scripts/change-naming.ts",
-    "scripts/coverage/render-coverage-report.ts",
+    "scripts/coverage/**/*.ts",
+    "scripts/publish/**/*.ts",
     "scripts/infra-control.ts",
     "scripts/infra-readiness.ts",
     "scripts/security/codeql-scan.ts",

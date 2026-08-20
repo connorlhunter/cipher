@@ -26,6 +26,10 @@ Dependabot branches are accepted as `dependabot/*`. These rules apply to new wor
 
 `package.json` is the Cipher release-version source. Run `bun run version:sync` after changing it to update the Cargo workspace, lockfile, internal versioned path dependencies, and Tauri metadata, then run `bun run version:check` before committing.
 
+## Coverage publication
+
+`bun run coverage:publish` runs the TypeScript coverage suite, creates one UTC publication timestamp, stamps the overview and TypeScript HTML pages, renders matching PDF downloads, and syncs only `projects/cipher/coverage/`. Set `ARTIFACTS_BUCKET` for the live artifact bucket, `SOURCE_ARTIFACTS_BUCKET` for a durable copy, and `ARTIFACTS_CLOUDFRONT_DISTRIBUTION_ID` when the published path needs invalidation.
+
 ## State-stack configuration
 
 After `CipherProductionState` is deployed, use its outputs to replace these ignored `.env` placeholders:

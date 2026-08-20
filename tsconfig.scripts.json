@@ -1,11 +1,12 @@
 {
   "compilerOptions": {
     "composite": true,
-    "lib": ["ES2023"],
+    "lib": ["ES2023", "DOM"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,
     "resolveJsonModule": true,
+    "skipLibCheck": true,
     "strict": true,
     "target": "ES2023",
     "types": ["bun"]
