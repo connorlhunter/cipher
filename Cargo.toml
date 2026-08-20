@@ -12,7 +12,7 @@ edition = "2024"
 license = "MIT"
 repository = "https://github.com/connorlhunter/cipher"
 rust-version = "1.96"
-version = "0.1.0-prealpha.2"
+version = "0.1.0-prealpha.3"
 
 [workspace.dependencies]
 axum = { version = "^0.8.9", features = ["ws"] }

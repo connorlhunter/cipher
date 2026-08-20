@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Cipher",
-  "version": "0.1.0-prealpha.2",
+  "version": "0.1.0-prealpha.3",
   "identifier": "me.connorhunter.cipher",
   "build": {
     "beforeDevCommand": "bun run web:dev",
