@@ -380,6 +380,7 @@ dependencies = [
 name = "cipher-desktop"
 version = "0.1.0-prealpha.5"
 dependencies = [
+ "cipher-types",
  "serde",
  "serde_json",
  "tauri",
