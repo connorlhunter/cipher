@@ -12,9 +12,11 @@ workspace = true
 [dependencies]
 axum.workspace = true
 cipher-types = { path = "../../crates/cipher-types", version = "^0.1.0-prealpha.5" }
+serde.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+uuid = { version = "^1.24.0", features = ["v4"] }
 
 [dev-dependencies]
 http-body-util = "^0.1.5"
