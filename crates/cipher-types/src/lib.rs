@@ -2,6 +2,9 @@
 
 use serde::Serialize;
 
+/// Versioned identifiers, timestamps, errors, and limits shared by Cipher protocols.
+pub mod protocol;
+
 /// JSON status returned by health and readiness endpoints.
 #[derive(Debug, Serialize)]
 pub struct ServiceStatus {

@@ -1,0 +1,20 @@
+{
+  "userId": "usr_018f9a76-4c00-7a12-8b0c-4d5e6f708192",
+  "deviceId": "dev_018f9a76-4c01-7a12-8b0c-4d5e6f708192",
+  "sessionId": "ses_018f9a76-4c02-7a12-8b0c-4d5e6f708192",
+  "conversationId": "cnv_018f9a76-4c03-7a12-8b0c-4d5e6f708192",
+  "serverId": "srv_018f9a76-4c04-7a12-8b0c-4d5e6f708192",
+  "channelId": "chn_018f9a76-4c05-7a12-8b0c-4d5e6f708192",
+  "messageId": "msg_018f9a76-4c06-7a12-8b0c-4d5e6f708192",
+  "eventId": "evt_018f9a76-4c07-7a12-8b0c-4d5e6f708192",
+  "mediaId": "med_018f9a76-4c08-7a12-8b0c-4d5e6f708192",
+  "timestamp": "2026-08-21T18:42:15.123Z",
+  "cursor": "cur_AQIDBAUGBwgJCgsMDQ4PEA",
+  "idempotencyKey": "idem_018f9a76-4c09-7a12-8b0c-4d5e6f708192",
+  "protocolVersion": 1,
+  "error": {
+    "code": "unsupported_version",
+    "message": "This Cipher version is no longer supported.",
+    "retryable": false
+  }
+}
