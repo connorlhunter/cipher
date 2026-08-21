@@ -68,7 +68,7 @@ function requiredPresenceResources(
   ]);
 }
 
-const liveRunner: CommandRunner = {
+export const liveRunner: CommandRunner = {
   run(command) {
     const result = Bun.spawnSync(command, { stderr: "pipe", stdout: "pipe" });
     return {
@@ -79,7 +79,7 @@ const liveRunner: CommandRunner = {
   },
 };
 
-const liveTemplateReader: TemplateReader = {
+export const liveTemplateReader: TemplateReader = {
   async read(path) {
     try {
       return JSON.parse(await Bun.file(path).text()) as unknown;
@@ -351,19 +351,30 @@ export async function runReadinessCheck(
   ];
 }
 
+/** Runs readiness checks and formats their successful results for the CLI. */
+export async function runReadinessCli(
+  environment: Readonly<Record<string, string | undefined>>,
+  runner: CommandRunner,
+  reader: TemplateReader,
+  log: (message: string) => void,
+): Promise<string[]> {
+  const config = loadInfrastructureConfig(environment);
+  const results = await runReadinessCheck(
+    { accountId: environment.CIPHER_AWS_ACCOUNT_ID },
+    runner,
+    reader,
+    config,
+  );
+  log("Ready for deployment:");
+  for (const result of results) {
+    log(`- ${result}`);
+  }
+  return results;
+}
+
 if (import.meta.main) {
   try {
-    const config = loadInfrastructureConfig(process.env as Record<string, string | undefined>);
-    const results = await runReadinessCheck(
-      { accountId: process.env.CIPHER_AWS_ACCOUNT_ID },
-      liveRunner,
-      liveTemplateReader,
-      config,
-    );
-    console.log("Ready for deployment:");
-    for (const result of results) {
-      console.log(`- ${result}`);
-    }
+    await runReadinessCli(process.env, liveRunner, liveTemplateReader, console.log);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown readiness check failure.";
     console.error(`Not ready: ${message}`);

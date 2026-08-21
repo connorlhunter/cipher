@@ -25,9 +25,16 @@ export function parseDesktopStatus(value: unknown): DesktopStatus {
   return { message: value.message };
 }
 
+/** Invokes and validates the native desktop-status command. */
+export async function desktopStatusWith(
+  invokeCommand: (command: string) => Promise<unknown>,
+): Promise<DesktopStatus> {
+  return parseDesktopStatus(await invokeCommand("desktop_status"));
+}
+
 /**
  * @returns The validated status of the native desktop core.
  */
 export async function desktopStatus(): Promise<DesktopStatus> {
-  return parseDesktopStatus(await invoke<unknown>("desktop_status"));
+  return desktopStatusWith((command) => invoke<unknown>(command));
 }

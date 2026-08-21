@@ -42,7 +42,7 @@ interface ParsedArguments {
   dryRun: boolean;
 }
 
-const liveRunner: CommandRunner = {
+export const liveRunner: CommandRunner = {
   run(command) {
     const result = Bun.spawnSync(command, { stderr: "pipe", stdout: "pipe" });
     return {
@@ -360,6 +360,24 @@ function completionNote(action: InfrastructureAction): string {
   }
 }
 
+/** Formats the control command result for a human operator. */
+export function logInfrastructureControlResult(
+  action: InfrastructureAction,
+  dryRun: boolean,
+  commands: ReadonlyArray<string>,
+  log: (message: string) => void,
+): void {
+  if (commands.length === 0) {
+    log("No Cipher production stacks exist for this action.");
+  } else {
+    log(dryRun ? "Planned:" : "Completed:");
+    for (const command of commands) {
+      log(`- ${command}`);
+    }
+  }
+  log(dryRun ? "Dry run only. No AWS commands were run." : completionNote(action));
+}
+
 if (import.meta.main) {
   const parsed = parseArguments(Bun.argv.slice(2));
   const config = loadInfrastructureConfig(process.env as Record<string, string | undefined>);
@@ -370,15 +388,5 @@ if (import.meta.main) {
     config,
   );
 
-  if (commands.length === 0) {
-    console.log("No Cipher production stacks exist for this action.");
-  } else {
-    console.log(parsed.dryRun ? "Planned:" : "Completed:");
-    for (const command of commands) {
-      console.log(`- ${command}`);
-    }
-  }
-  console.log(
-    parsed.dryRun ? "Dry run only. No AWS commands were run." : completionNote(parsed.action),
-  );
+  logInfrastructureControlResult(parsed.action, parsed.dryRun, commands, console.log);
 }

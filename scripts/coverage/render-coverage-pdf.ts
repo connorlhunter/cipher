@@ -86,6 +86,20 @@ export async function renderCoveragePdfs(
   return { overview: paths.overview.pdf, rust: paths.rust.pdf, typescript: paths.typescript.pdf };
 }
 
+/** Runs PDF rendering and reports a non-sensitive CLI failure. */
+export async function renderCoveragePdfsCli(
+  render: (() => Promise<unknown>) | undefined = undefined,
+  errorLog: (message: string) => void = console.error,
+): Promise<boolean> {
+  try {
+    await (render ?? renderCoveragePdfs)();
+    return true;
+  } catch (error) {
+    errorLog(error instanceof Error ? error.message : String(error));
+    return false;
+  }
+}
+
 /**
  * Prints one local HTML page with the shared browser instance.
  *
@@ -122,10 +136,5 @@ async function renderPdf(
 }
 
 if (import.meta.main) {
-  try {
-    await renderCoveragePdfs();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : error);
-    process.exit(1);
-  }
+  if (!(await renderCoveragePdfsCli())) process.exit(1);
 }

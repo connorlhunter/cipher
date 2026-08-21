@@ -44,16 +44,22 @@ test("renders labeled coverage pages from Bun LCOV output", () => {
   const typeScript = readFileSync(join(directory, "coverage", "typescript", "index.html"), "utf8");
   expect(index).toContain("TypeScript");
   expect(index).toContain('href="rust/index.html"');
+  expect(index).toContain("requires at least 95% line and function coverage");
   expect(index).toContain('Updated <time datetime="2026-08-20T18:42:31.123Z">Aug 20, 2026</time>');
   expect(index).toContain("connorhunter.theme.scheme");
   expect(index).toContain('aria-current="page"');
   expect(typeScript).toContain("75.00% (3/4)");
   expect(typeScript).toContain(
+    "Required minimum: 95% lines and functions. Generated from the Bun test suite.",
+  );
+  expect(typeScript).toContain(
     'Updated <time datetime="2026-08-20T18:42:31.123Z">Aug 20, 2026</time>',
   );
   expect(typeScript).toContain('href="../index.html"');
   expect(rust).toContain("50.00% (1/2)");
-  expect(rust).toContain("Generated with cargo-llvm-cov.");
+  expect(rust).toContain(
+    "Required minimum: 95% lines and functions. Generated with cargo-llvm-cov.",
+  );
   expect(rust).toContain("apps/server.rs");
   expect(rust).not.toContain(process.cwd());
 });

@@ -65,7 +65,7 @@ export interface ScanSummary {
   skipped: boolean;
 }
 
-const liveRunner: CommandRunner = {
+export const liveRunner: CommandRunner = {
   run(command, options) {
     if (options.captureOutput) {
       const result = Bun.spawnSync(command, {
@@ -89,7 +89,7 @@ const liveRunner: CommandRunner = {
   },
 };
 
-const liveFileSystem: ScanFileSystem = {
+export const liveFileSystem: ScanFileSystem = {
   makeDirectory(path) {
     mkdirSync(path, { recursive: true });
   },
@@ -271,20 +271,30 @@ export function runCodeqlScan(
   return { findings, skipped: false };
 }
 
-if (import.meta.main) {
+/** Runs the local scanner and reports a non-sensitive CLI failure. */
+export function runCodeqlCli(
+  environment: ScanEnvironment,
+  runner: CommandRunner,
+  fileSystem: ScanFileSystem,
+  log: (message: string) => void,
+  errorLog: (message: string) => void,
+): ScanSummary | undefined {
   try {
-    runCodeqlScan(
-      {
-        githubActions: process.env.GITHUB_ACTIONS,
-        repositoryRoot,
-      },
-      liveRunner,
-      liveFileSystem,
-      console.log,
-    );
+    return runCodeqlScan(environment, runner, fileSystem, log);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown CodeQL scan failure.";
-    console.error(`CodeQL scan failed: ${message}`);
-    process.exitCode = 1;
+    errorLog(`CodeQL scan failed: ${message}`);
+    return undefined;
   }
+}
+
+if (import.meta.main) {
+  const summary = runCodeqlCli(
+    { githubActions: process.env.GITHUB_ACTIONS, repositoryRoot },
+    liveRunner,
+    liveFileSystem,
+    console.log,
+    console.error,
+  );
+  if (summary === undefined) process.exitCode = 1;
 }

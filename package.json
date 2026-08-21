@@ -23,7 +23,7 @@
     "coverage:publish": "bun run coverage:typescript && bun run coverage:rust && bun scripts/publish/publish-coverage.ts",
     "coverage:render": "bun scripts/coverage/render-coverage-report.ts",
     "coverage:render:pdf": "bun scripts/coverage/render-coverage-pdf.ts",
-    "coverage:typescript": "bun test test/*.test.ts test/coverage/*.test.ts --coverage --timeout 30000",
+    "coverage:typescript": "bun test test/*.test.ts test/coverage/*.test.ts --coverage --timeout 30000 && bun scripts/coverage/check-typescript-coverage.ts",
     "coverage:rust": "bun scripts/coverage/run-rust-coverage.ts",
     "desktop:build": "bun scripts/run-tauri.ts build",
     "desktop:build:debug": "bun scripts/run-tauri.ts build --debug --bundles app",

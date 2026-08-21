@@ -24,3 +24,13 @@ fn main() {
         .run(tauri::generate_context!())
         .expect("Cipher desktop failed to start");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::desktop_status;
+
+    #[test]
+    fn reports_the_desktop_core_status() {
+        assert_eq!(desktop_status().message, "Desktop core is ready.");
+    }
+}

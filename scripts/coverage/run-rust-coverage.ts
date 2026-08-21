@@ -5,7 +5,19 @@ const outputPath = join("coverage", "rust.lcov");
 mkdirSync("coverage", { recursive: true });
 
 const result = Bun.spawnSync(
-  ["cargo", "llvm-cov", "--workspace", "--locked", "--lcov", "--output-path", outputPath],
+  [
+    "cargo",
+    "llvm-cov",
+    "--workspace",
+    "--locked",
+    "--fail-under-lines",
+    "95",
+    "--fail-under-functions",
+    "95",
+    "--lcov",
+    "--output-path",
+    outputPath,
+  ],
   { stderr: "inherit", stdout: "inherit" },
 );
 
