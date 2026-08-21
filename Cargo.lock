@@ -392,10 +392,12 @@ dependencies = [
  "axum",
  "cipher-types",
  "http-body-util",
+ "serde",
  "tokio",
  "tower",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
