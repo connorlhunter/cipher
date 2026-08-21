@@ -28,7 +28,7 @@ Dependabot branches are accepted as `dependabot/*`. These rules apply to new wor
 
 ## Coverage publication
 
-`bun run coverage:publish` runs the TypeScript and Rust coverage suites, creates one UTC publication timestamp, stamps the overview plus both surface pages, renders matching PDF downloads, and syncs only `projects/cipher/coverage/`. Rust coverage uses the pinned `cargo-llvm-cov` tool and Rust's `llvm-tools-preview` component. Set `ARTIFACTS_BUCKET` for the live artifact bucket, `SOURCE_ARTIFACTS_BUCKET` for a durable copy, and `ARTIFACTS_CLOUDFRONT_DISTRIBUTION_ID` when the published path needs invalidation.
+`bun run coverage:publish` runs the TypeScript and Rust coverage suites, enforcing at least 95% line and function coverage for each independently. It creates one UTC publication timestamp, stamps the overview plus both surface pages, renders matching PDF downloads, and syncs only `projects/cipher/coverage/`. Rust coverage uses the pinned `cargo-llvm-cov` tool and Rust's `llvm-tools-preview` component. Set `ARTIFACTS_BUCKET` for the live artifact bucket, `SOURCE_ARTIFACTS_BUCKET` for a durable copy, and `ARTIFACTS_CLOUDFRONT_DISTRIBUTION_ID` when the published path needs invalidation.
 
 ## State-stack configuration
 

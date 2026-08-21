@@ -7,6 +7,7 @@ const RUN_B: &str = "61601476-46c6-4a56-ac7a-3374d35a986d";
 fn creates_scoped_resource_names() {
     let scope = FixtureScope::parse(RUN_A).unwrap();
 
+    assert_eq!(scope.run_id(), RUN_A);
     assert_eq!(
         scope.resource_id("alice").unwrap(),
         format!("cipher-live-it-{RUN_A}-alice")

@@ -5,6 +5,8 @@ import {
   parseArguments,
   plannedCommands,
   runInfrastructureControl,
+  liveRunner,
+  logInfrastructureControlResult,
   type CommandRunner,
 } from "../scripts/infra-control";
 
@@ -248,5 +250,96 @@ describe("infrastructure controls", () => {
         "never",
       ],
     ]);
+  });
+
+  test("rejects an unsafe AWS target and failed infrastructure commands", () => {
+    const { runner } = createRunner();
+    expect(() =>
+      runInfrastructureControl(
+        ["pause", `--confirm=${confirmation("pause")}`],
+        { isInteractive: true },
+        runner,
+        config,
+      ),
+    ).toThrow("expected 12-digit production account");
+
+    const accountFailure: CommandRunner = {
+      run() {
+        return { exitCode: 1, stderr: "unavailable", stdout: "" };
+      },
+    };
+    expect(() =>
+      runInfrastructureControl(
+        ["pause", `--confirm=${confirmation("pause")}`],
+        interactiveEnvironment,
+        accountFailure,
+        config,
+      ),
+    ).toThrow("Could not verify the active AWS account");
+
+    const unknownStack: CommandRunner = {
+      run(command) {
+        if (command[1] === "sts")
+          return { exitCode: 0, stderr: "", stdout: `${expectedAccount}\n` };
+        return { exitCode: 255, stderr: "access denied", stdout: "" };
+      },
+    };
+    expect(() =>
+      runInfrastructureControl(
+        ["pause", `--confirm=${confirmation("pause")}`],
+        interactiveEnvironment,
+        unknownStack,
+        config,
+      ),
+    ).toThrow("Could not determine whether CipherProductionRuntime exists");
+
+    const commandFailure: CommandRunner = {
+      run(command) {
+        if (command[1] === "sts")
+          return { exitCode: 0, stderr: "", stdout: `${expectedAccount}\n` };
+        if (command[1] === "cloudformation") {
+          return {
+            exitCode: 0,
+            stderr: "",
+            stdout: command.includes("CipherProductionRuntime") ? "{}" : "",
+          };
+        }
+        return { exitCode: 1, stderr: "failed", stdout: "" };
+      },
+    };
+    expect(() =>
+      runInfrastructureControl(
+        ["pause", `--confirm=${confirmation("pause")}`],
+        interactiveEnvironment,
+        commandFailure,
+        config,
+      ),
+    ).toThrow("Infrastructure command failed");
+  });
+
+  test("uses the native command runner without shell interpolation", () => {
+    const result = liveRunner.run(["bun", "--version"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toMatch(/^1\./u);
+  });
+
+  test("formats dry-run and completed lifecycle results", () => {
+    const messages: string[] = [];
+    logInfrastructureControlResult("pause", false, [], (message) => messages.push(message));
+    logInfrastructureControlResult("resume", true, ["deploy CipherProductionRuntime"], (message) =>
+      messages.push(message),
+    );
+    logInfrastructureControlResult(
+      "destroy-all",
+      false,
+      ["destroy CipherProductionRuntime"],
+      (message) => messages.push(message),
+    );
+
+    expect(messages).toContain("No Cipher production stacks exist for this action.");
+    expect(messages).toContain("Planned:");
+    expect(messages).toContain("Completed:");
+    expect(messages.some((message) => message.includes("storage costs"))).toBe(true);
+    expect(messages.some((message) => message.includes("retention can still apply"))).toBe(true);
   });
 });

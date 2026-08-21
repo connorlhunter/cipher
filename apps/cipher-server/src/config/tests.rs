@@ -102,6 +102,7 @@ fn rejects_invalid_aws_identifiers() {
         ("CIPHER_USERS_TABLE", "u"),
         ("CIPHER_MEDIA_BUCKET", "Cipher-media"),
         ("CIPHER_MEDIA_BUCKET", "cipher-example-media"),
+        ("CIPHER_MEDIA_BUCKET", "192.168.0.1"),
     ] {
         let mut values = valid_values();
         values.insert(key, value.into());

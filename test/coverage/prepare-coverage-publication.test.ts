@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { coveragePaths } from "../../scripts/coverage/coverage-paths";
-import { prepareCoveragePublication } from "../../scripts/coverage/prepare-coverage-publication";
+import {
+  prepareCoveragePublication,
+  prepareCoveragePublicationCli,
+} from "../../scripts/coverage/prepare-coverage-publication";
 
 const sampleLcov = "SF:src/example.ts\nFNF:1\nFNH:1\nLF:2\nLH:2\nend_of_record\n";
 
@@ -51,5 +54,24 @@ describe("prepareCoveragePublication", () => {
     for (const path of Object.values(result.pdf)) {
       expect(readFileSync(path).subarray(0, 4).toString()).toBe("%PDF");
     }
+  });
+
+  test("reports preparation CLI failures without exiting the test process", async () => {
+    const errors: string[] = [];
+    await expect(
+      prepareCoveragePublicationCli(
+        async () => undefined,
+        (message) => errors.push(message),
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      prepareCoveragePublicationCli(
+        async () => {
+          throw new Error("preparation failed");
+        },
+        (message) => errors.push(message),
+      ),
+    ).resolves.toBe(false);
+    expect(errors).toEqual(["preparation failed"]);
   });
 });

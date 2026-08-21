@@ -55,11 +55,20 @@ export async function prepareCoveragePublication(
   };
 }
 
-if (import.meta.main) {
+/** Runs preparation and reports a non-sensitive CLI failure. */
+export async function prepareCoveragePublicationCli(
+  prepare: (() => Promise<unknown>) | undefined = undefined,
+  errorLog: (message: string) => void = console.error,
+): Promise<boolean> {
   try {
-    await prepareCoveragePublication();
+    await (prepare ?? prepareCoveragePublication)();
+    return true;
   } catch (error) {
-    console.error(error instanceof Error ? error.message : error);
-    process.exit(1);
+    errorLog(error instanceof Error ? error.message : String(error));
+    return false;
   }
+}
+
+if (import.meta.main) {
+  if (!(await prepareCoveragePublicationCli())) process.exit(1);
 }

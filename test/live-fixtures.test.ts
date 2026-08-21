@@ -2,13 +2,14 @@ import { describe, expect, test } from "bun:test";
 
 import {
   createFixtureScope,
+  liveRunner,
   loadLiveFixtureConfig,
   runLiveFixtureCheck,
   type CommandRunner,
 } from "../scripts/live-fixtures";
 
 const runId = "550e8400-e29b-41d4-a716-446655440000";
-const config = loadLiveFixtureConfig({
+const fixtureEnvironment = {
   CIPHER_AWS_ACCOUNT_ID: "123456789012",
   CIPHER_AWS_REGION: "us-east-1",
   CIPHER_COGNITO_CLIENT_ID: "clientid",
@@ -19,7 +20,8 @@ const config = loadLiveFixtureConfig({
   CIPHER_MESSAGES_TABLE: "cipher-production-messages",
   CIPHER_STATE_STACK: "CipherProductionState",
   CIPHER_USERS_TABLE: "cipher-production-users",
-});
+};
+const config = loadLiveFixtureConfig(fixtureEnvironment);
 
 function response(command: ReadonlyArray<string>): string {
   if (command[1] === "sts") return "123456789012\n";
@@ -85,6 +87,13 @@ describe("live fixture scope", () => {
         CIPHER_USERS_TABLE: "users",
       }),
     ).toThrow("must be us-east-1");
+
+    expect(() =>
+      loadLiveFixtureConfig({ ...fixtureEnvironment, CIPHER_AWS_ACCOUNT_ID: "000000000000" }),
+    ).toThrow("12-digit production account");
+    expect(() =>
+      loadLiveFixtureConfig({ ...fixtureEnvironment, CIPHER_MEDIA_BUCKET: " " }),
+    ).toThrow("CIPHER_MEDIA_BUCKET must be a non-empty value");
   });
 
   test("uses exact, marked cleanup and leaves unmarked sentinels outside it", () => {
@@ -111,5 +120,23 @@ describe("live fixture scope", () => {
       (command) => command[2] === "delete-item" && command.includes("--condition-expression"),
     );
     expect(markedDelete).toContain("fixture_run_id = :run");
+  });
+
+  test("reports failed AWS commands without leaking configuration", () => {
+    const runner: CommandRunner = {
+      run() {
+        return { exitCode: 1, stderr: "access denied", stdout: "" };
+      },
+    };
+
+    expect(() => runLiveFixtureCheck(config, runner, runId)).toThrow(
+      "AWS account check failed: access denied",
+    );
+  });
+
+  test("uses the native fixture runner without a shell", () => {
+    const result = liveRunner.run(["bun", "--version"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toMatch(/^1\./u);
   });
 });

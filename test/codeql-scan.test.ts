@@ -1,9 +1,14 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, join, resolve } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { basename, resolve } from "node:path";
 
 import {
   runCodeqlScan,
   sarifResultCount,
+  liveFileSystem,
+  liveRunner,
+  runCodeqlCli,
   type CommandOptions,
   type CommandResult,
   type CommandRunner,
@@ -164,6 +169,92 @@ describe("local CodeQL scan", () => {
     ).toThrow("CodeQL found 2 SARIF result(s). Review .codeql/results; no baseline is applied.");
     expect(calls).toHaveLength(7);
   });
+
+  test("rejects unavailable, failed database, and failed analysis commands", () => {
+    const { fileSystem } = createFileSystem();
+    const unavailable: CommandRunner = {
+      run() {
+        throw new Error("not installed");
+      },
+    };
+    expect(() =>
+      runCodeqlScan({ repositoryRoot: root }, unavailable, fileSystem, () => undefined),
+    ).toThrow("Install it and put the literal codeql executable on PATH");
+
+    for (const commandPart of ["create", "analyze"]) {
+      const runner: CommandRunner = {
+        run(command) {
+          if (command[2] === commandPart) return { exitCode: 1, stderr: "", stdout: "" };
+          return commandResult(`${requiredToolchains.codeql}\n`);
+        },
+      };
+      expect(() =>
+        runCodeqlScan({ repositoryRoot: root }, runner, fileSystem, () => undefined),
+      ).toThrow(commandPart === "create" ? "database creation failed" : "analysis failed");
+    }
+  });
+
+  test("uses process and filesystem adapters without a shell", () => {
+    const directory = mkdtempSync(join(tmpdir(), "cipher-codeql-adapter-"));
+    try {
+      expect(
+        liveRunner.run(["bun", "--version"], {
+          captureOutput: true,
+          cwd: directory,
+        }),
+      ).toEqual(expect.objectContaining({ exitCode: 0, stderr: "" }));
+      expect(
+        liveRunner.run(["bun", "--version"], { captureOutput: false, cwd: directory }),
+      ).toEqual({ exitCode: 0, stderr: "", stdout: "" });
+
+      const output = join(directory, "nested", "result.json");
+      liveFileSystem.makeDirectory(join(directory, "nested"));
+      writeFileSync(output, '{"runs":[]}');
+      expect(liveFileSystem.readJson(output)).toEqual({ runs: [] });
+      writeFileSync(output, "not json");
+      expect(() => liveFileSystem.readJson(output)).toThrow("Could not read CodeQL SARIF output");
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
+  test("formats CLI success and failures without setting process state itself", () => {
+    const messages: string[] = [];
+    const errors: string[] = [];
+    const { runner } = createRunner();
+    const { fileSystem } = createFileSystem();
+    expect(
+      runCodeqlCli(
+        { githubActions: "true", repositoryRoot: root },
+        runner,
+        fileSystem,
+        (message) => {
+          messages.push(message);
+        },
+        (message) => errors.push(message),
+      ),
+    ).toEqual({ findings: 0, skipped: true });
+    expect(messages).toHaveLength(1);
+    expect(errors).toEqual([]);
+
+    const unavailable: CommandRunner = {
+      run() {
+        throw new Error("not installed");
+      },
+    };
+    expect(
+      runCodeqlCli(
+        { repositoryRoot: root },
+        unavailable,
+        fileSystem,
+        () => undefined,
+        (message) => {
+          errors.push(message);
+        },
+      ),
+    ).toBeUndefined();
+    expect(errors.at(-1)).toContain("CodeQL scan failed:");
+  });
 });
 
 describe("SARIF result counting", () => {
@@ -176,6 +267,9 @@ describe("SARIF result counting", () => {
   });
 
   test("rejects malformed result collections", () => {
+    expect(() => sarifResultCount(null)).toThrow("runs are missing");
+    expect(() => sarifResultCount({ runs: "not-an-array" })).toThrow("runs are not an array");
+    expect(() => sarifResultCount({ runs: [null] })).toThrow("run is not an object");
     expect(() => sarifResultCount({ runs: [{ results: {} }] })).toThrow("results are not an array");
   });
 });

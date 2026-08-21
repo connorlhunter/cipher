@@ -1,8 +1,14 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 
 import { loadInfrastructureConfig } from "../config/environment";
 import {
   runReadinessCheck,
+  liveRunner,
+  liveTemplateReader,
+  runReadinessCli,
   type CommandRunner,
   type TemplateReader,
 } from "../scripts/infra-readiness";
@@ -187,5 +193,74 @@ describe("infrastructure readiness", () => {
     await expect(
       runReadinessCheck({ accountId }, runner, createReader(incompleteTemplates), config),
     ).rejects.toThrow("CipherProductionState is not ready. Missing outputs: MediaBucketName.");
+  });
+
+  test("rejects malformed environments, failed commands, and malformed templates", async () => {
+    const { runner } = createRunner();
+    await expect(runReadinessCheck({}, runner, createReader(), config)).rejects.toThrow(
+      "expected 12-digit production account",
+    );
+
+    const failedRunner: CommandRunner = {
+      run() {
+        return { exitCode: 1, stderr: "failed", stdout: "" };
+      },
+    };
+    await expect(
+      runReadinessCheck({ accountId }, failedRunner, createReader(), config),
+    ).rejects.toThrow("Could not verify the active AWS account");
+
+    const badResources = structuredClone(completeTemplates);
+    badResources["infra/cdk.out/CipherProductionState.template.json"] = { Resources: "invalid" };
+    await expect(
+      runReadinessCheck({ accountId }, runner, createReader(badResources), config),
+    ).rejects.toThrow("synthesized template has invalid resources");
+
+    const missingOutputs = structuredClone(completeTemplates);
+    const state = missingOutputs["infra/cdk.out/CipherProductionState.template.json"] as {
+      Outputs?: Record<string, unknown>;
+    };
+    delete state.Outputs;
+    await expect(
+      runReadinessCheck({ accountId }, runner, createReader(missingOutputs), config),
+    ).rejects.toThrow("synthesized template does not contain outputs");
+  });
+
+  test("uses native command and template readers without shell interpolation", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "cipher-readiness-adapter-"));
+    try {
+      expect(liveRunner.run(["bun", "--version"]).exitCode).toBe(0);
+      const template = join(directory, "template.json");
+      writeFileSync(template, '{"Resources":{}}');
+      await expect(liveTemplateReader.read(template)).resolves.toEqual({ Resources: {} });
+      writeFileSync(template, "invalid json");
+      await expect(liveTemplateReader.read(template)).rejects.toThrow(
+        "Could not read synthesized template",
+      );
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
+  test("formats successful readiness checks for the CLI", async () => {
+    const messages: string[] = [];
+    const { runner } = createRunner();
+    await expect(
+      runReadinessCli(
+        {
+          CIPHER_AWS_ACCOUNT_ID: accountId,
+          CIPHER_AWS_REGION: "us-east-1",
+          CIPHER_CONTROL_STACK: "CipherProductionControl",
+          CIPHER_NETWORK_STACK: "CipherProductionNetwork",
+          CIPHER_RUNTIME_STACK: "CipherProductionRuntime",
+          CIPHER_STATE_STACK: "CipherProductionState",
+        },
+        runner,
+        createReader(),
+        (message) => messages.push(message),
+      ),
+    ).resolves.toHaveLength(3);
+    expect(messages[0]).toBe("Ready for deployment:");
+    expect(messages).toHaveLength(4);
   });
 });

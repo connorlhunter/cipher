@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { parseDesktopStatus } from "../src/desktop";
+import { desktopStatusWith, parseDesktopStatus } from "../src/desktop";
 
 describe("parseDesktopStatus", () => {
   test("accepts a native desktop status", () => {
@@ -11,5 +11,13 @@ describe("parseDesktopStatus", () => {
 
   test.each([null, {}, { message: "" }, { message: 1 }])("rejects %p", (value) => {
     expect(() => parseDesktopStatus(value)).toThrow("invalid status");
+  });
+
+  test("validates the status returned by the native command", async () => {
+    await expect(
+      desktopStatusWith(async (command) => ({
+        message: command === "desktop_status" ? "ready" : "",
+      })),
+    ).resolves.toEqual({ message: "ready" });
   });
 });

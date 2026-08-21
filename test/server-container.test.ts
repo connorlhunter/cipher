@@ -43,4 +43,10 @@ describe("server container", () => {
       ".",
     ]);
   });
+
+  test("requires a non-empty Rust toolchain channel", () => {
+    expect(() => rustVersionFromToolchain("[toolchain]\nchannel = ''\n")).toThrow(
+      "non-empty toolchain channel",
+    );
+  });
 });

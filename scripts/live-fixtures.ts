@@ -61,7 +61,7 @@ interface ObjectTaggingResponse {
 }
 
 /** Executes commands against the current shell environment. */
-const liveRunner: CommandRunner = {
+export const liveRunner: CommandRunner = {
   run(command) {
     const result = Bun.spawnSync([...command], { stderr: "pipe", stdout: "pipe" });
     return {

@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -6,6 +9,7 @@ import {
   currentBranchName,
   isAllowedBranchName,
   isAllowedChangeTitle,
+  runChangeNaming,
 } from "../scripts/change-naming";
 
 describe("branch naming", () => {
@@ -72,5 +76,36 @@ describe("change title naming", () => {
   ])("rejects %s", (title) => {
     expect(isAllowedChangeTitle(title)).toBe(false);
     expect(() => assertAllowedChangeTitle(title, "title")).toThrow("Invalid title");
+  });
+});
+
+describe("change naming command", () => {
+  test("validates branch and pull-request modes", async () => {
+    await expect(
+      runChangeNaming(["--branch"], { GITHUB_HEAD_REF: "feat/coverage-quality" }),
+    ).resolves.toBeUndefined();
+    await expect(
+      runChangeNaming(["--pull-request-title"], {
+        CIPHER_PULL_REQUEST_TITLE: "test: enforce coverage quality",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  test("rejects unsupported command invocations", async () => {
+    await expect(runChangeNaming(["--branch", "unexpected"], {})).rejects.toThrow("Usage:");
+  });
+
+  test("reads and validates a commit subject file", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "cipher-change-naming-"));
+    try {
+      const message = join(directory, "message");
+      writeFileSync(message, "fix(coverage): enforce 95 percent\n\nbody");
+      await expect(
+        runChangeNaming(["--commit-message-file", message], {}),
+      ).resolves.toBeUndefined();
+      expect(currentBranchName()).toMatch(/^(?:main|[a-z]+\/)/u);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
   });
 });

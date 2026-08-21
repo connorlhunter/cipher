@@ -12,6 +12,8 @@ interface CoverageFile {
   readonly path: string;
 }
 
+const minimumCoveragePercent = 95;
+
 /** Parses Bun LCOV output into file coverage records. */
 export function parseLcov(lcov: string): CoverageFile[] {
   const files: CoverageFile[] = [];
@@ -274,7 +276,7 @@ function page(
 function indexHtml(updatedAt: string): string {
   return page(
     "Cipher coverage",
-    '<header><h1>Cipher coverage</h1><p>Available reports are grouped by code surface.</p></header><div class="table-wrap"><table><thead><tr><th>Page</th><th>Scope</th></tr></thead><tbody><tr><td><a href="typescript/index.html">TypeScript</a></td><td>Desktop UI, tooling, and infrastructure scripts</td></tr><tr><td><a href="rust/index.html">Rust</a></td><td>Desktop core, server, shared types, and test support</td></tr></tbody></table></div>',
+    `<header><h1>Cipher coverage</h1><p>Available reports are grouped by code surface. Each requires at least ${minimumCoveragePercent}% line and function coverage.</p></header><div class="table-wrap"><table><thead><tr><th>Page</th><th>Scope</th></tr></thead><tbody><tr><td><a href="typescript/index.html">TypeScript</a></td><td>Desktop UI, tooling, and infrastructure scripts</td></tr><tr><td><a href="rust/index.html">Rust</a></td><td>Desktop core, server, shared types, and test support</td></tr></tbody></table></div>`,
     "index.html",
     updatedAt,
     "overview",
@@ -298,7 +300,7 @@ function reportHtml(
   const functions = total(files, "functions");
   return page(
     `Cipher ${surface} coverage`,
-    `<header><h1>${surface} coverage</h1><p>${description}</p></header><div class="table-wrap"><table><thead><tr><th>File</th><th>Lines</th><th>Functions</th></tr></thead><tbody><tr><th>All files</th><td>${percent(lines)}% (${lines.covered}/${lines.found})</td><td>${percent(functions)}% (${functions.covered}/${functions.found})</td></tr>${rows}</tbody></table></div>`,
+    `<header><h1>${surface} coverage</h1><p>Required minimum: ${minimumCoveragePercent}% lines and functions. ${description}</p></header><div class="table-wrap"><table><thead><tr><th>File</th><th>Lines</th><th>Functions</th></tr></thead><tbody><tr><th>All files</th><td>${percent(lines)}% (${lines.covered}/${lines.found})</td><td>${percent(functions)}% (${functions.covered}/${functions.found})</td></tr>${rows}</tbody></table></div>`,
     "../index.html",
     updatedAt,
     surface.toLowerCase() as "rust" | "typescript",

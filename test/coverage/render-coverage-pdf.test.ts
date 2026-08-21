@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   renderCoveragePdfs,
+  renderCoveragePdfsCli,
   type CoveragePdfBrowserLauncher,
   type CoveragePdfOptions,
 } from "../../scripts/coverage/render-coverage-pdf";
@@ -67,5 +68,24 @@ describe("renderCoveragePdfs", () => {
     directory = mkdtempSync(join(tmpdir(), "cipher-coverage-pdf-"));
 
     await expect(renderCoveragePdfs(directory)).rejects.toThrow("Missing coverage report");
+  });
+
+  test("reports PDF CLI failures without exiting the test process", async () => {
+    const errors: string[] = [];
+    await expect(
+      renderCoveragePdfsCli(
+        async () => undefined,
+        (message) => errors.push(message),
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      renderCoveragePdfsCli(
+        async () => {
+          throw new Error("rendering failed");
+        },
+        (message) => errors.push(message),
+      ),
+    ).resolves.toBe(false);
+    expect(errors).toEqual(["rendering failed"]);
   });
 });

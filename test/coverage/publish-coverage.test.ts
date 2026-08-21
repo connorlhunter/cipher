@@ -5,6 +5,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import {
   coverageInvalidations,
   coveragePublishDestinations,
+  defaultCommandRunner,
   publishCoverage,
   type CommandRunner,
 } from "../../scripts/publish/publish-coverage";
@@ -126,5 +127,17 @@ describe("publish coverage", () => {
         workspaceRoot: directory,
       }),
     ).rejects.toThrow("Missing Cipher coverage HTML or PDF output");
+  });
+
+  test("captures output from successful commands and reports failed commands", async () => {
+    await expect(
+      defaultCommandRunner("bun", ["--version"], "Coverage command"),
+    ).resolves.toBeUndefined();
+    await expect(
+      defaultCommandRunner("bun", ["run", "definitely-not-a-script"], "Coverage command"),
+    ).rejects.toThrow("Coverage command failed with exit code");
+    await expect(
+      defaultCommandRunner("definitely-not-a-command", [], "Coverage command"),
+    ).rejects.toThrow("Coverage command failed");
   });
 });

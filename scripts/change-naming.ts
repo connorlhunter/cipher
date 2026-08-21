@@ -70,7 +70,10 @@ async function readCommitSubject(path: string): Promise<string> {
 }
 
 /** Validates the requested naming target. */
-async function main(arguments_: string[], environment: Environment): Promise<void> {
+export async function runChangeNaming(
+  arguments_: string[],
+  environment: Environment,
+): Promise<void> {
   const [mode, value] = arguments_;
 
   if (mode === "--branch" && value === undefined) {
@@ -97,5 +100,5 @@ async function main(arguments_: string[], environment: Environment): Promise<voi
 }
 
 if (import.meta.main) {
-  await main(process.argv.slice(2), process.env);
+  await runChangeNaming(process.argv.slice(2), process.env);
 }
