@@ -74,27 +74,21 @@ fn rejects_invalid_bind() {
 #[test]
 fn rejects_the_wrong_region_or_endpoints() {
     for (key, value) in [
-        ("CIPHER_AWS_REGION", "not a region".to_owned()),
-        ("CIPHER_API_ORIGIN", "not-an-origin".to_owned()),
-        ("CIPHER_REALTIME_URL", "not-a-websocket-url".to_owned()),
+        ("CIPHER_AWS_REGION", "us-west-2".to_owned()),
+        (
+            "CIPHER_API_ORIGIN",
+            "https://other.connorhunter.me".to_owned(),
+        ),
+        (
+            "CIPHER_REALTIME_URL",
+            "wss://cipher.connorhunter.me/realtime".to_owned(),
+        ),
     ] {
         let mut values = valid_values();
         values.insert(key, value);
 
         assert!(parse(&values).is_err());
     }
-}
-
-#[test]
-fn requires_matching_api_and_realtime_hosts() {
-    let mut values = valid_values();
-    let realtime = values["CIPHER_REALTIME_URL"].replacen("cipher.", "other.", 1);
-    values.insert("CIPHER_REALTIME_URL", realtime);
-
-    assert_eq!(
-        parse(&values).unwrap_err(),
-        "CIPHER_REALTIME_URL must use the API origin host"
-    );
 }
 
 #[test]

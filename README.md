@@ -28,7 +28,7 @@ Dependabot branches are accepted as `dependabot/*`. These rules apply to new wor
 
 ## Coverage publication
 
-`bun run coverage:publish` runs the TypeScript coverage suite, creates one UTC publication timestamp, stamps the overview and TypeScript HTML pages, renders matching PDF downloads, and syncs only `projects/cipher/coverage/`. Set `ARTIFACTS_BUCKET` for the live artifact bucket, `SOURCE_ARTIFACTS_BUCKET` for a durable copy, and `ARTIFACTS_CLOUDFRONT_DISTRIBUTION_ID` when the published path needs invalidation.
+`bun run coverage:publish` runs the TypeScript and Rust coverage suites, creates one UTC publication timestamp, stamps the overview plus both surface pages, renders matching PDF downloads, and syncs only `projects/cipher/coverage/`. Rust coverage uses the pinned `cargo-llvm-cov` tool and Rust's `llvm-tools-preview` component. Set `ARTIFACTS_BUCKET` for the live artifact bucket, `SOURCE_ARTIFACTS_BUCKET` for a durable copy, and `ARTIFACTS_CLOUDFRONT_DISTRIBUTION_ID` when the published path needs invalidation.
 
 ## State-stack configuration
 
@@ -42,7 +42,7 @@ After `CipherProductionState` is deployed, use its outputs to replace these igno
 - `MediaTableName` → `CIPHER_MEDIA_TABLE`
 - `MediaBucketName` → `CIPHER_MEDIA_BUCKET`
 
-`MediaPendingPrefix`, `MediaReadyPrefix`, and `MediaFixturePrefix` describe the S3 key roots enforced by the state stack. They are runtime workflow inputs once media commands and live fixture checks are implemented.
+`MediaPendingPrefix`, `MediaReadyPrefix`, and `MediaFixturePrefix` describe the S3 key roots enforced by the state stack. Run `bun --env-file=.env run live:fixtures` to validate the deployed Cognito, DynamoDB, and S3 settings with a fresh UUID-scoped fixture run. It refuses an incorrect production account or State output, requires DynamoDB and S3 ownership markers before cleanup, and verifies that unmarked same-prefix sentinels remain untouched.
 
 The state policy enforces TLS, SSE-S3, and those key roots. A later signed upload command must bind the SHA-256 checksum header, then verify it with `HeadObject`; S3 does not expose that checksum header as a bucket-policy condition key.
 

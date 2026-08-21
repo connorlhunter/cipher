@@ -16,12 +16,15 @@ describe("renderCoveragePdfs", () => {
     directory = "";
   });
 
-  test("renders both coverage pages as PDFs", async () => {
+  test("renders every coverage page as a PDF", async () => {
     directory = mkdtempSync(join(tmpdir(), "cipher-coverage-pdf-"));
     const coverage = join(directory, "coverage");
+    const rust = join(coverage, "rust");
     const typescript = join(coverage, "typescript");
+    mkdirSync(rust, { recursive: true });
     mkdirSync(typescript, { recursive: true });
     writeFileSync(join(coverage, "index.html"), "<!doctype html><h1>Cipher coverage</h1>");
+    writeFileSync(join(rust, "index.html"), "<!doctype html><h1>Rust coverage</h1>");
     writeFileSync(join(typescript, "index.html"), "<!doctype html><h1>TypeScript coverage</h1>");
 
     const pdfOptions: CoveragePdfOptions[] = [];
@@ -46,20 +49,21 @@ describe("renderCoveragePdfs", () => {
 
     expect(output).toEqual({
       overview: join(coverage, "index.pdf"),
+      rust: join(rust, "index.pdf"),
       typescript: join(typescript, "index.pdf"),
     });
     for (const path of Object.values(output)) {
       expect(existsSync(path)).toBe(true);
       expect(readFileSync(path).subarray(0, 4).toString()).toBe("%PDF");
     }
-    expect(pdfOptions).toHaveLength(2);
+    expect(pdfOptions).toHaveLength(3);
     expect(pdfOptions).toContainEqual(
       expect.objectContaining({ format: "Letter", landscape: true, printBackground: true }),
     );
     expect(closed).toBe(true);
   });
 
-  test("requires both HTML pages", async () => {
+  test("requires every HTML page", async () => {
     directory = mkdtempSync(join(tmpdir(), "cipher-coverage-pdf-"));
 
     await expect(renderCoveragePdfs(directory)).rejects.toThrow("Missing coverage report");

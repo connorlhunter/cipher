@@ -162,6 +162,8 @@ export async function publishCoverage(options: PublishCoverageOptions = {}): Pro
   const requiredFiles = [
     paths.overview.html,
     paths.overview.pdf,
+    paths.rust.html,
+    paths.rust.pdf,
     paths.typescript.html,
     paths.typescript.pdf,
   ];
