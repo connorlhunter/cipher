@@ -1,0 +1,26 @@
+{
+  "description": "A repeated client sequence is rejected before its command can execute.",
+  "frames": [
+    {
+      "type": "hello",
+      "supportedVersions": [1]
+    },
+    {
+      "type": "command",
+      "protocolVersion": 1,
+      "sequence": 1,
+      "idempotencyKey": "idem_0198b1dc-0000-7000-8000-000000000002",
+      "command": {
+        "type": "subscribe",
+        "conversationIds": ["cnv_0198b1dc-0000-7000-8000-000000000003"]
+      }
+    },
+    {
+      "type": "heartbeat",
+      "protocolVersion": 1,
+      "sequence": 1,
+      "nonce": "duplicate"
+    }
+  ],
+  "expectedError": "duplicate"
+}

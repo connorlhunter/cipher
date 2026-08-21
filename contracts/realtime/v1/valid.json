@@ -1,0 +1,66 @@
+{
+  "description": "A negotiated v1 connection accepts ordered subscription, acknowledgement, and heartbeat frames.",
+  "clientFrames": [
+    {
+      "type": "hello",
+      "supportedVersions": [1, 0],
+      "resumeCursor": "cur_AQIDBA",
+      "lastAcknowledgedServerSequence": 42
+    },
+    {
+      "type": "command",
+      "protocolVersion": 1,
+      "sequence": 1,
+      "idempotencyKey": "idem_0198b1dc-0000-7000-8000-000000000002",
+      "command": {
+        "type": "subscribe",
+        "conversationIds": ["cnv_0198b1dc-0000-7000-8000-000000000003"]
+      }
+    },
+    {
+      "type": "ack",
+      "protocolVersion": 1,
+      "sequence": 2,
+      "acknowledgedServerSequence": 43
+    },
+    {
+      "type": "heartbeat",
+      "protocolVersion": 1,
+      "sequence": 3,
+      "nonce": "ping-42"
+    }
+  ],
+  "serverFrames": [
+    {
+      "type": "welcome",
+      "protocolVersion": 1,
+      "sessionId": "ses_0198b1dc-0000-7000-8000-000000000001",
+      "nextServerSequence": 43,
+      "heartbeatIntervalMs": 30000,
+      "resumed": true
+    },
+    {
+      "type": "ack",
+      "protocolVersion": 1,
+      "acknowledgedClientSequence": 1,
+      "idempotencyKey": "idem_0198b1dc-0000-7000-8000-000000000002"
+    },
+    {
+      "type": "event",
+      "protocolVersion": 1,
+      "sequence": 43,
+      "eventId": "evt_0198b1dc-0000-7000-8000-000000000004",
+      "cursor": "cur_AQIDBQ",
+      "event": {
+        "type": "message_available",
+        "conversationId": "cnv_0198b1dc-0000-7000-8000-000000000003",
+        "messageId": "msg_0198b1dc-0000-7000-8000-000000000005"
+      }
+    },
+    {
+      "type": "heartbeat",
+      "protocolVersion": 1,
+      "nonce": "ping-42"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "description": "A structurally invalid client frame is never interpreted as a command.",
+  "wire": "{\"type\":\"command\",\"protocolVersion\":1,\"sequence\":1,\"idempotencyKey\":\"idem_0198b1dc-0000-7000-8000-000000000002\",\"command\":\"subscribe\"}",
+  "expectedError": "invalid_request"
+}
