@@ -36,7 +36,7 @@ fn golden_fixture_round_trips_with_stable_json() {
 
     assert_eq!(
         serde_json::to_string_pretty(&fixture).unwrap(),
-        FIXTURE.trim()
+        FIXTURE.trim().replace("\r\n", "\n")
     );
     assert_eq!(fixture.user_id.as_str(), format!("usr_{UUID}"));
     assert_eq!(
