@@ -1,7 +1,7 @@
 //! Canonical primitives shared by Cipher's versioned protocols.
 //!
 //! Application identifiers are lower-case, prefixed UUID version 7 values. Cipher
-//! creates its own [`UserId`] during account provisioning and stores a private
+//! creates its own `UserId` during account provisioning and stores a private
 //! one-to-one mapping from the Cognito subject to that identifier. Cognito subjects
 //! are authentication-provider data and never become Cipher protocol identifiers.
 //! This lets Cipher keep a stable public identity if its authentication provider
@@ -9,7 +9,7 @@
 //!
 //! All timestamps are UTC RFC 3339 values with exactly millisecond precision. Cursors
 //! are opaque server-issued base64url tokens. Clients must not construct or interpret
-//! a cursor, and must only reuse an [`IdempotencyKey`] for retries of the same
+//! a cursor, and must only reuse an `IdempotencyKey` for retries of the same
 //! authenticated mutation.
 
 use std::{fmt, str::FromStr};
