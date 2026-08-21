@@ -22,7 +22,7 @@ mod tests {
     #[test]
     fn reports_the_desktop_core_status() {
         assert_eq!(
-            desktop_status(Some(CURRENT_PROTOCOL_VERSION))
+            desktop_status(Some(CURRENT_PROTOCOL_VERSION.get()))
                 .unwrap()
                 .message,
             "Desktop core is ready."
