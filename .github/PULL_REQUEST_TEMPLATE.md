@@ -1,3 +1,7 @@
+## Linked issue
+
+Closes #<issue-number>
+
 ## What changed
 
 ## Checks

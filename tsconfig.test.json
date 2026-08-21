@@ -15,6 +15,7 @@
     "config/environment.ts",
     "scripts/build-server-image.ts",
     "scripts/change-naming.ts",
+    "scripts/issue-link.ts",
     "scripts/coverage/**/*.ts",
     "scripts/publish/**/*.ts",
     "scripts/infra-control.ts",

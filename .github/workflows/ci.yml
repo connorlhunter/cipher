@@ -27,6 +27,12 @@ jobs:
         run: bun scripts/change-naming.ts --pull-request-title
         env:
           CIPHER_PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+      - name: Require linked issue
+        if: github.event_name == 'pull_request'
+        run: bun scripts/issue-link.ts --pull-request-body
+        env:
+          CIPHER_PULL_REQUEST_AUTHOR: ${{ github.event.pull_request.user.login }}
+          CIPHER_PULL_REQUEST_BODY: ${{ github.event.pull_request.body }}
       - run: bun audit --audit-level=high
       - run: cargo install cargo-deny --version 0.20.2 --locked
       - run: cargo deny check
