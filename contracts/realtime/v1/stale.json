@@ -1,0 +1,28 @@
+{
+  "description": "A client sequence older than the latest accepted frame is rejected as stale.",
+  "frames": [
+    {
+      "type": "hello",
+      "supportedVersions": [1]
+    },
+    {
+      "type": "heartbeat",
+      "protocolVersion": 1,
+      "sequence": 1,
+      "nonce": "first"
+    },
+    {
+      "type": "heartbeat",
+      "protocolVersion": 1,
+      "sequence": 2,
+      "nonce": "second"
+    },
+    {
+      "type": "heartbeat",
+      "protocolVersion": 1,
+      "sequence": 1,
+      "nonce": "stale"
+    }
+  ],
+  "expectedError": "stale"
+}

@@ -1,0 +1,8 @@
+{
+  "description": "A hello frame with no mutually supported version fails negotiation.",
+  "frame": {
+    "type": "hello",
+    "supportedVersions": [2]
+  },
+  "expectedError": "unsupported_version"
+}

@@ -1,0 +1,8 @@
+{
+  "description": "The retained v0 handshake remains compatible during the v1 rollout.",
+  "frame": {
+    "type": "hello",
+    "supportedVersions": [0]
+  },
+  "expectedSelectedVersion": 0
+}

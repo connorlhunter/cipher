@@ -1,0 +1,5 @@
+{
+  "description": "Control frames larger than the 64 KiB transport limit are rejected before JSON parsing.",
+  "minimumFrameBytes": 65537,
+  "expectedError": "too_large"
+}

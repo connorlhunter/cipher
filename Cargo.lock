@@ -386,6 +386,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cipher-realtime-protocol"
+version = "0.1.0-prealpha.5"
+dependencies = [
+ "cipher-types",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cipher-server"
 version = "0.1.0-prealpha.5"
 dependencies = [

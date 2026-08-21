@@ -4,7 +4,13 @@ const packageJsonPath = "package.json";
 const cargoTomlPath = "Cargo.toml";
 const cargoLockPath = "Cargo.lock";
 const tauriConfigPath = "src-tauri/tauri.conf.json";
-const workspaceCrates = ["cipher-desktop", "cipher-server", "cipher-test-support", "cipher-types"];
+const workspaceCrates = [
+  "cipher-desktop",
+  "cipher-realtime-protocol",
+  "cipher-server",
+  "cipher-test-support",
+  "cipher-types",
+];
 const versionedPathDependencies = [
   {
     matcher: /(cipher-types = \{ path = "[^"]+", version = ")\^[^"]+(" \})/u,

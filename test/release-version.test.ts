@@ -19,7 +19,13 @@ test("keeps application release metadata aligned", () => {
   );
   expect(tauriVersion).toBe(packageVersion);
 
-  for (const crate of ["cipher-desktop", "cipher-server", "cipher-test-support", "cipher-types"]) {
+  for (const crate of [
+    "cipher-desktop",
+    "cipher-realtime-protocol",
+    "cipher-server",
+    "cipher-test-support",
+    "cipher-types",
+  ]) {
     const lockedVersion = cargoLock.match(
       new RegExp(`\\[\\[package\\]\\]\\nname = "${crate}"\\nversion = "([^"]+)"`, "u"),
     )?.[1];
