@@ -18,6 +18,10 @@ pub const REQUIRED_KEYS: [&str; 12] = [
     "CIPHER_MEDIA_BUCKET",
 ];
 
+const PRODUCTION_REGION: &str = "us-east-1";
+const PRODUCTION_API_ORIGIN: &str = "https://cipher.connorhunter.me";
+const PRODUCTION_REALTIME_URL: &str = "wss://cipher.connorhunter.me/v1/realtime";
+
 /// Validated settings required to start the Cipher server.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ServerConfig {
@@ -102,11 +106,8 @@ impl ServerConfig {
         }
 
         let region = required(&mut lookup, "CIPHER_AWS_REGION")?;
-        if !valid_aws_region(&region) {
-            return Err(ConfigError::new(
-                "CIPHER_AWS_REGION",
-                "must be an AWS region name",
-            ));
+        if region != PRODUCTION_REGION {
+            return Err(ConfigError::new("CIPHER_AWS_REGION", "must be us-east-1"));
         }
 
         let account_id = required(&mut lookup, "CIPHER_AWS_ACCOUNT_ID")?;
@@ -122,15 +123,16 @@ impl ServerConfig {
 
         let api_origin = required(&mut lookup, "CIPHER_API_ORIGIN")?;
         let realtime_url = required(&mut lookup, "CIPHER_REALTIME_URL")?;
-        let api_host = https_host(&api_origin)
-            .ok_or_else(|| ConfigError::new("CIPHER_API_ORIGIN", "must be an HTTPS origin"))?;
-        let realtime_host = wss_host(&realtime_url).ok_or_else(|| {
-            ConfigError::new("CIPHER_REALTIME_URL", "must be a secure WebSocket URL")
-        })?;
-        if api_host != realtime_host {
+        if api_origin != PRODUCTION_API_ORIGIN {
+            return Err(ConfigError::new(
+                "CIPHER_API_ORIGIN",
+                "must be https://cipher.connorhunter.me",
+            ));
+        }
+        if realtime_url != PRODUCTION_REALTIME_URL {
             return Err(ConfigError::new(
                 "CIPHER_REALTIME_URL",
-                "must use the API origin host",
+                "must be wss://cipher.connorhunter.me/v1/realtime",
             ));
         }
 
@@ -237,48 +239,6 @@ fn table_name(
         return Err(ConfigError::new(key, "must be a DynamoDB table name"));
     }
     Ok(value)
-}
-
-fn valid_aws_region(value: &str) -> bool {
-    let parts = value.split('-').collect::<Vec<_>>();
-    let Some(number) = parts.last() else {
-        return false;
-    };
-    (parts.len() == 3 || (parts.len() == 4 && parts[1] == "gov"))
-        && parts.iter().all(|part| !part.is_empty())
-        && number.parse::<u8>().is_ok()
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
-}
-
-fn https_host(value: &str) -> Option<&str> {
-    endpoint_host(value, "https://", false)
-}
-
-fn wss_host(value: &str) -> Option<&str> {
-    endpoint_host(value, "wss://", true)
-}
-
-fn endpoint_host<'a>(value: &'a str, scheme: &str, require_path: bool) -> Option<&'a str> {
-    let remainder = value.strip_prefix(scheme)?;
-    if remainder.is_empty()
-        || remainder.contains(['?', '#', '@'])
-        || remainder.bytes().any(|byte| byte.is_ascii_whitespace())
-    {
-        return None;
-    }
-    let (host, path) = remainder.split_once('/').unwrap_or((remainder, ""));
-    if host.is_empty()
-        || !host
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b':'))
-        || (require_path && path.is_empty())
-        || (!require_path && !path.is_empty())
-    {
-        return None;
-    }
-    Some(host)
 }
 
 /// Validates S3 bucket syntax, including the IPv4-address exclusion.

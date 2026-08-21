@@ -8,6 +8,7 @@ import { pdfBrowserLaunchOptions } from "./pdf-browser";
 /** PDF paths produced for one coverage publication. */
 export interface RenderedCoveragePdfs {
   readonly overview: string;
+  readonly rust: string;
   readonly typescript: string;
 }
 
@@ -48,10 +49,10 @@ export interface RenderCoveragePdfsOptions {
 }
 
 /**
- * Renders Cipher's overview and TypeScript coverage pages as PDFs.
+ * Renders Cipher's overview, TypeScript, and Rust coverage pages as PDFs.
  *
  * @param workspaceRoot - Cipher checkout containing the coverage pages.
- * @returns Both generated PDF paths.
+ * @returns Every generated PDF path.
  */
 export async function renderCoveragePdfs(
   workspaceRoot = process.cwd(),
@@ -59,7 +60,7 @@ export async function renderCoveragePdfs(
 ): Promise<RenderedCoveragePdfs> {
   const paths = coveragePaths(workspaceRoot);
 
-  for (const input of [paths.overview.html, paths.typescript.html]) {
+  for (const input of [paths.overview.html, paths.typescript.html, paths.rust.html]) {
     if (!existsSync(input)) {
       throw new Error(`Missing coverage report: ${input}. Render coverage HTML first.`);
     }
@@ -73,13 +74,16 @@ export async function renderCoveragePdfs(
   try {
     await renderPdf(browser, paths.overview.html, paths.overview.pdf);
     await renderPdf(browser, paths.typescript.html, paths.typescript.pdf);
+    await renderPdf(browser, paths.rust.html, paths.rust.pdf);
   } finally {
     await browser.close();
   }
 
-  console.log(`Rendered coverage PDFs: ${paths.overview.pdf}, ${paths.typescript.pdf}`);
+  console.log(
+    `Rendered coverage PDFs: ${paths.overview.pdf}, ${paths.typescript.pdf}, ${paths.rust.pdf}`,
+  );
 
-  return { overview: paths.overview.pdf, typescript: paths.typescript.pdf };
+  return { overview: paths.overview.pdf, rust: paths.rust.pdf, typescript: paths.typescript.pdf };
 }
 
 /**

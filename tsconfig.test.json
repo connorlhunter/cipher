@@ -19,6 +19,7 @@
     "scripts/publish/**/*.ts",
     "scripts/infra-control.ts",
     "scripts/infra-readiness.ts",
+    "scripts/live-fixtures.ts",
     "scripts/security/codeql-scan.ts",
     "scripts/toolchains.ts",
     "src/desktop.ts",

@@ -3,7 +3,12 @@ import { resolve } from "node:path";
 /** Fixed paths for Cipher's multi-page coverage publication. */
 export interface CoveragePaths {
   readonly directory: string;
-  readonly lcov: string;
+  readonly rustLcov: string;
+  readonly typescriptLcov: string;
+  readonly rust: {
+    readonly html: string;
+    readonly pdf: string;
+  };
   readonly overview: {
     readonly html: string;
     readonly pdf: string;
@@ -22,11 +27,17 @@ export interface CoveragePaths {
  */
 export function coveragePaths(workspaceRoot = process.cwd()): CoveragePaths {
   const directory = resolve(workspaceRoot, "coverage");
+  const rustDirectory = resolve(directory, "rust");
   const typescriptDirectory = resolve(directory, "typescript");
 
   return {
     directory,
-    lcov: resolve(directory, "lcov.info"),
+    rustLcov: resolve(directory, "rust.lcov"),
+    typescriptLcov: resolve(directory, "lcov.info"),
+    rust: {
+      html: resolve(rustDirectory, "index.html"),
+      pdf: resolve(rustDirectory, "index.pdf"),
+    },
     overview: {
       html: resolve(directory, "index.html"),
       pdf: resolve(directory, "index.pdf"),

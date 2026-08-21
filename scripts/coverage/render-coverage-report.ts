@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 
 interface CoverageMetric {
   readonly covered: number;
@@ -39,17 +39,33 @@ export function parseLcov(lcov: string): CoverageFile[] {
   return files;
 }
 
-/** Renders the coverage index and the first labeled TypeScript page. */
+/** Renders the coverage index plus TypeScript and Rust coverage pages. */
 export function renderCoverageReport(
-  lcovPath = join("coverage", "lcov.info"),
+  typescriptLcovPath = join("coverage", "lcov.info"),
+  rustLcovPath = join("coverage", "rust.lcov"),
   outputRoot = "coverage",
   updatedAt = new Date().toISOString(),
 ): void {
-  const files = parseLcov(readFileSync(lcovPath, "utf8"));
+  const typescriptFiles = parseLcov(readFileSync(typescriptLcovPath, "utf8"));
+  const rustFiles = parseLcov(readFileSync(rustLcovPath, "utf8"));
   const publicationDate = coverageUpdatedAt(updatedAt);
-  const reportPath = join(outputRoot, "typescript", "index.html");
-  mkdirSync(dirname(reportPath), { recursive: true });
-  writeFileSync(reportPath, reportHtml(files, publicationDate));
+  const typeScriptReportPath = join(outputRoot, "typescript", "index.html");
+  const rustReportPath = join(outputRoot, "rust", "index.html");
+  mkdirSync(dirname(typeScriptReportPath), { recursive: true });
+  mkdirSync(dirname(rustReportPath), { recursive: true });
+  writeFileSync(
+    typeScriptReportPath,
+    reportHtml(
+      "TypeScript",
+      "Generated from the Bun test suite.",
+      typescriptFiles,
+      publicationDate,
+    ),
+  );
+  writeFileSync(
+    rustReportPath,
+    reportHtml("Rust", "Generated with cargo-llvm-cov.", rustFiles, publicationDate),
+  );
   writeFileSync(join(outputRoot, "index.html"), indexHtml(publicationDate));
 }
 
@@ -73,6 +89,11 @@ function total(files: CoverageFile[], key: "functions" | "lines"): CoverageMetri
 
 function html(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+/** Returns a report path relative to the checkout when the LCOV source is absolute. */
+function reportPath(path: string): string {
+  return isAbsolute(path) ? relative(process.cwd(), path) : path;
 }
 
 /**
@@ -235,38 +256,52 @@ function themeScript(): string {
   return `<script>(() => { const schemes = new Set(["atlas", "paper", "citrine", "harbor", "midnight", "onyx", "rose", "tide", "ember", "quartz"]); const keys = ["connorhunter.theme.scheme", "portfolio.theme.scheme"]; const fallback = window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "midnight" : "atlas"; let scheme; for (const key of keys) { try { const value = localStorage.getItem(key); if (schemes.has(value)) { scheme = value; break; } } catch {} } document.documentElement.dataset.scheme = scheme || fallback; window.addEventListener("message", (event) => { const message = event.data; if (!message || typeof message !== "object" || !schemes.has(message.scheme) || (typeof message.type === "string" && !message.type.endsWith(".theme.scheme"))) return; document.documentElement.dataset.scheme = message.scheme; }); })();</script>`;
 }
 
-function page(title: string, content: string, indexHref: string, updatedAt: string): string {
-  const typeScriptHref = indexHref === "index.html" ? "typescript/index.html" : "index.html";
+function page(
+  title: string,
+  content: string,
+  indexHref: string,
+  updatedAt: string,
+  current: "overview" | "rust" | "typescript",
+): string {
+  const href = (surface: "typescript" | "rust"): string =>
+    indexHref === "index.html" ? `${surface}/index.html` : `../${surface}/index.html`;
   return `<!doctype html>
 <html data-scheme="atlas" lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title>
 <style>${themeCss()}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:.9375rem/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{width:min(100%,72rem);margin:0 auto;padding:clamp(1.25rem,4vw,3rem)}header{margin-bottom:1.25rem}h1{margin:0;font-size:clamp(1.75rem,4vw,2.75rem);line-height:1.05}p{margin:.5rem 0 0;color:var(--muted)}a{color:var(--accent);font-weight:700;text-underline-offset:.2em}nav{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem}nav a{border:1px solid var(--border);border-radius:999px;background:var(--panel);padding:.45rem .75rem;text-decoration:none}nav a[aria-current="page"]{border-color:var(--accent);background:var(--accent-soft)}.coverage-updated{margin:0 0 1.25rem;color:var(--muted);font-size:.8rem;font-weight:700}.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:.5rem;background:var(--panel)}table{width:100%;min-width:36rem;border-collapse:collapse}th,td{border-bottom:1px solid var(--border);padding:.85rem 1rem;text-align:left;vertical-align:top}thead th{color:var(--muted);font-size:.75rem;letter-spacing:.04em;text-transform:uppercase}tbody tr:first-child{background:color-mix(in srgb,var(--accent) 10%,transparent);font-weight:800}tbody tr:last-child th,tbody tr:last-child td{border-bottom:0}@media(max-width:600px){main{padding:1.25rem .75rem}table{min-width:31rem}th,td{padding:.7rem .75rem}}</style>${themeScript()}</head>
-<body><main><nav aria-label="Coverage pages"><a ${indexHref === "index.html" ? 'aria-current="page"' : ""} href="${indexHref}">Overview</a><a ${indexHref === "index.html" ? "" : 'aria-current="page"'} href="${typeScriptHref}">TypeScript</a></nav><p class="coverage-updated">Updated <time datetime="${html(updatedAt)}">${html(coverageUpdatedAtLabel(updatedAt))}</time></p>${content}</main></body></html>`;
+<body><main><nav aria-label="Coverage pages"><a ${current === "overview" ? 'aria-current="page"' : ""} href="${indexHref}">Overview</a><a ${current === "typescript" ? 'aria-current="page"' : ""} href="${href("typescript")}">TypeScript</a><a ${current === "rust" ? 'aria-current="page"' : ""} href="${href("rust")}">Rust</a></nav><p class="coverage-updated">Updated <time datetime="${html(updatedAt)}">${html(coverageUpdatedAtLabel(updatedAt))}</time></p>${content}</main></body></html>`;
 }
 
 function indexHtml(updatedAt: string): string {
   return page(
     "Cipher coverage",
-    '<header><h1>Cipher coverage</h1><p>Available reports are grouped by code surface.</p></header><div class="table-wrap"><table><thead><tr><th>Page</th><th>Scope</th></tr></thead><tbody><tr><td><a href="typescript/index.html">TypeScript</a></td><td>Desktop UI, tooling, and infrastructure scripts</td></tr><tr><td>Rust</td><td>Coverage tooling is not selected yet.</td></tr></tbody></table></div>',
+    '<header><h1>Cipher coverage</h1><p>Available reports are grouped by code surface.</p></header><div class="table-wrap"><table><thead><tr><th>Page</th><th>Scope</th></tr></thead><tbody><tr><td><a href="typescript/index.html">TypeScript</a></td><td>Desktop UI, tooling, and infrastructure scripts</td></tr><tr><td><a href="rust/index.html">Rust</a></td><td>Desktop core, server, shared types, and test support</td></tr></tbody></table></div>',
     "index.html",
     updatedAt,
+    "overview",
   );
 }
 
-function reportHtml(files: CoverageFile[], updatedAt: string): string {
+function reportHtml(
+  surface: "Rust" | "TypeScript",
+  description: string,
+  files: CoverageFile[],
+  updatedAt: string,
+): string {
   const rows = files
     .sort((left, right) => left.path.localeCompare(right.path))
     .map(
       (file) =>
-        `<tr><th>${html(file.path)}</th><td>${percent(file.lines)}% (${file.lines.covered}/${file.lines.found})</td><td>${percent(file.functions)}% (${file.functions.covered}/${file.functions.found})</td></tr>`,
+        `<tr><th>${html(reportPath(file.path))}</th><td>${percent(file.lines)}% (${file.lines.covered}/${file.lines.found})</td><td>${percent(file.functions)}% (${file.functions.covered}/${file.functions.found})</td></tr>`,
     )
     .join("");
   const lines = total(files, "lines");
   const functions = total(files, "functions");
   return page(
-    "Cipher TypeScript coverage",
-    `<header><h1>TypeScript coverage</h1><p>Generated from the Bun test suite.</p></header><div class="table-wrap"><table><thead><tr><th>File</th><th>Lines</th><th>Functions</th></tr></thead><tbody><tr><th>All files</th><td>${percent(lines)}% (${lines.covered}/${lines.found})</td><td>${percent(functions)}% (${functions.covered}/${functions.found})</td></tr>${rows}</tbody></table></div>`,
+    `Cipher ${surface} coverage`,
+    `<header><h1>${surface} coverage</h1><p>${description}</p></header><div class="table-wrap"><table><thead><tr><th>File</th><th>Lines</th><th>Functions</th></tr></thead><tbody><tr><th>All files</th><td>${percent(lines)}% (${lines.covered}/${lines.found})</td><td>${percent(functions)}% (${functions.covered}/${functions.found})</td></tr>${rows}</tbody></table></div>`,
     "../index.html",
     updatedAt,
+    surface.toLowerCase() as "rust" | "typescript",
   );
 }
 

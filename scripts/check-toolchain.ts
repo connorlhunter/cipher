@@ -41,6 +41,13 @@ if (semanticVersion(cargoVersion, "Cargo") !== requiredToolchains.rust) {
   throw new Error(`Cipher requires Cargo ${requiredToolchains.rust}; found ${cargoVersion}.`);
 }
 
+const coverageVersion = commandVersion("cargo", ["llvm-cov", "--version"]);
+if (semanticVersion(coverageVersion, "cargo-llvm-cov") !== requiredToolchains.cargoLlvmCov) {
+  throw new Error(
+    `Cipher requires cargo-llvm-cov ${requiredToolchains.cargoLlvmCov}; found ${coverageVersion}.`,
+  );
+}
+
 if (process.platform !== "darwin" && process.platform !== "win32") {
   throw new Error("Cipher development is supported on macOS and Windows only.");
 }
@@ -66,4 +73,5 @@ if (!Bun.semver.satisfies(installedTauri, requiredToolchains.tauri)) {
 console.log(`Bun ${Bun.version}`);
 console.log(rustVersion);
 console.log(cargoVersion);
+console.log(coverageVersion);
 console.log(tauriVersion);

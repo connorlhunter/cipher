@@ -21,19 +21,24 @@ describe("prepareCoveragePublication", () => {
     const coverage = join(directory, "coverage");
     mkdirSync(coverage, { recursive: true });
     writeFileSync(join(coverage, "lcov.info"), sampleLcov);
+    writeFileSync(join(coverage, "rust.lcov"), sampleLcov);
 
     const result = await prepareCoveragePublication(directory, "2026-08-20T14:42:31.123-04:00", {
       renderPdfs: async (workspaceRoot) => {
         const paths = coveragePaths(workspaceRoot);
-        for (const path of [paths.overview.html, paths.typescript.html]) {
+        for (const path of [paths.overview.html, paths.typescript.html, paths.rust.html]) {
           expect(readFileSync(path, "utf8")).toContain(
             'Updated <time datetime="2026-08-20T18:42:31.123Z">Aug 20, 2026</time>',
           );
         }
-        for (const path of [paths.overview.pdf, paths.typescript.pdf]) {
+        for (const path of [paths.overview.pdf, paths.typescript.pdf, paths.rust.pdf]) {
           writeFileSync(path, "%PDF-1.4");
         }
-        return { overview: paths.overview.pdf, typescript: paths.typescript.pdf };
+        return {
+          overview: paths.overview.pdf,
+          rust: paths.rust.pdf,
+          typescript: paths.typescript.pdf,
+        };
       },
     });
 

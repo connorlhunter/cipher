@@ -5,6 +5,7 @@ interface PackageManifest {
   devDependencies?: Record<string, string>;
   packageManager?: string;
   toolchain?: {
+    cargoLlvmCov?: string;
     codeql?: string;
   };
 }
@@ -50,6 +51,7 @@ const rustToolchainManifest = Bun.TOML.parse(
 /** @description Toolchain requirements read from their canonical manifests. */
 export const requiredToolchains = Object.freeze({
   bun: bunVersion(requiredString(packageManifest.packageManager, "packageManager")),
+  cargoLlvmCov: requiredString(packageManifest.toolchain?.cargoLlvmCov, "toolchain.cargoLlvmCov"),
   codeql: requiredString(packageManifest.toolchain?.codeql, "toolchain.codeql"),
   rust: requiredString(rustToolchainManifest.toolchain?.channel, "Rust toolchain channel"),
   tauri: requiredString(

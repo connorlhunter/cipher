@@ -66,11 +66,15 @@ describe("publish coverage", () => {
     spyOn(console, "log").mockImplementation(() => undefined);
     directory = mkdtempSync(join(tmpdir(), "cipher-coverage-publish-"));
     const coverage = join(directory, "coverage");
+    const rust = join(coverage, "rust");
     const typescript = join(coverage, "typescript");
+    mkdirSync(rust, { recursive: true });
     mkdirSync(typescript, { recursive: true });
     for (const path of [
       join(coverage, "index.html"),
       join(coverage, "index.pdf"),
+      join(rust, "index.html"),
+      join(rust, "index.pdf"),
       join(typescript, "index.html"),
       join(typescript, "index.pdf"),
     ]) {
