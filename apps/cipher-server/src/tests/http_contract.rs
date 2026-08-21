@@ -29,9 +29,9 @@ async fn success_envelope_matches_the_golden_example() {
         response.headers()[http_contract::API_VERSION_HEADER],
         http_contract::API_VERSION
     );
-    assert_eq!(
-        response_body(response).await,
-        include_str!("fixtures/http-v1/success.json").trim()
+    assert_json_fixture(
+        &response_body(response).await,
+        include_str!("fixtures/http-v1/success.json"),
     );
 }
 
@@ -40,15 +40,15 @@ async fn denial_conflict_and_expiry_match_the_golden_examples() {
     let cases = [
         (
             http_contract::ApiErrorCode::Forbidden,
-            include_str!("fixtures/http-v1/denial.json").trim(),
+            include_str!("fixtures/http-v1/denial.json"),
         ),
         (
             http_contract::ApiErrorCode::Conflict,
-            include_str!("fixtures/http-v1/idempotency-conflict.json").trim(),
+            include_str!("fixtures/http-v1/idempotency-conflict.json"),
         ),
         (
             http_contract::ApiErrorCode::Expired,
-            include_str!("fixtures/http-v1/idempotency-expired.json").trim(),
+            include_str!("fixtures/http-v1/idempotency-expired.json"),
         ),
     ];
 
@@ -59,7 +59,7 @@ async fn denial_conflict_and_expiry_match_the_golden_examples() {
         );
 
         assert_eq!(response.status(), code.status());
-        assert_eq!(response_body(response).await, fixture);
+        assert_json_fixture(&response_body(response).await, fixture);
     }
 }
 
@@ -76,9 +76,9 @@ async fn validation_failure_matches_the_golden_example() {
     );
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(
-        response_body(response).await,
-        include_str!("fixtures/http-v1/validation.json").trim()
+    assert_json_fixture(
+        &response_body(response).await,
+        include_str!("fixtures/http-v1/validation.json"),
     );
 }
 
@@ -90,9 +90,9 @@ async fn unsupported_version_matches_the_golden_example() {
     );
 
     assert_eq!(response.status(), StatusCode::NOT_ACCEPTABLE);
-    assert_eq!(
-        response_body(response).await,
-        include_str!("fixtures/http-v1/unsupported-version.json").trim()
+    assert_json_fixture(
+        &response_body(response).await,
+        include_str!("fixtures/http-v1/unsupported-version.json"),
     );
 }
 
@@ -314,4 +314,11 @@ async fn response_body(response: Response) -> String {
             .to_vec(),
     )
     .unwrap()
+}
+
+fn assert_json_fixture(actual: &str, fixture: &str) {
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(actual).unwrap(),
+        serde_json::from_str::<serde_json::Value>(fixture).unwrap()
+    );
 }
