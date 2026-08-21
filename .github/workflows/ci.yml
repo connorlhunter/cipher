@@ -57,7 +57,9 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
       - run: cargo test --workspace --locked
-      - run: bun run coverage:rust
+      - name: Run Rust coverage gate
+        if: runner.os == 'macOS'
+        run: bun run coverage:rust
       - run: cargo build --workspace --release --locked
       - run: bun run desktop:build
 
