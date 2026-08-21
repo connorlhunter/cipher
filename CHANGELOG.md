@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.0-prealpha.5] - 2026-08-21
+
+### Fixed
+
+- Publish the Rust coverage report alongside the overview and TypeScript reports, including its navigation control.
+
+### Known limits
+
+- Control, Network, and Runtime stacks, authenticated application flows, durable messaging, and live operational drills remain incomplete.
+
 ## [0.1.0-prealpha.4] - 2026-08-20
 
 ### Changed
