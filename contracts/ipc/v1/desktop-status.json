@@ -1,0 +1,7 @@
+{
+  "protocolVersion": 1,
+  "command": "desktop_status",
+  "response": {
+    "message": "Desktop core is ready."
+  }
+}

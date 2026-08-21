@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 import { desktopStatusWith, parseDesktopStatus } from "../src/desktop";
+import {
+  desktopCommands,
+  desktopProtocol,
+  maxDesktopStatusMessageLength,
+  supportsDesktopProtocol,
+} from "../src/desktop-contract";
 
 describe("parseDesktopStatus", () => {
   test("accepts a native desktop status", () => {
@@ -15,9 +22,45 @@ describe("parseDesktopStatus", () => {
 
   test("validates the status returned by the native command", async () => {
     await expect(
-      desktopStatusWith(async (command) => ({
-        message: command === "desktop_status" ? "ready" : "",
+      desktopStatusWith(async (command, arguments_) => ({
+        message:
+          command === desktopCommands.status &&
+          arguments_.protocolVersion === desktopProtocol.current
+            ? "ready"
+            : "",
       })),
     ).resolves.toEqual({ message: "ready" });
+  });
+
+  test("rejects secrets and unbounded status payloads", () => {
+    expect(() => parseDesktopStatus({ message: "ready", token: "forbidden" })).toThrow(
+      "invalid status",
+    );
+    expect(() =>
+      parseDesktopStatus({ message: "x".repeat(maxDesktopStatusMessageLength + 1) }),
+    ).toThrow("invalid status");
+  });
+
+  test("accepts the current and previous desktop protocol versions", () => {
+    expect(supportsDesktopProtocol(desktopProtocol.previous)).toBe(true);
+    expect(supportsDesktopProtocol(desktopProtocol.current)).toBe(true);
+    expect(supportsDesktopProtocol(desktopProtocol.current + 1)).toBe(false);
+  });
+
+  test("keeps current and previous fixture responses compatible", () => {
+    for (const fixturePath of [
+      "contracts/ipc/v0/desktop-status.json",
+      "contracts/ipc/v1/desktop-status.json",
+    ]) {
+      const fixture = JSON.parse(readFileSync(fixturePath, "utf8")) as {
+        protocolVersion: number;
+        command: string;
+        response: unknown;
+      };
+
+      expect(supportsDesktopProtocol(fixture.protocolVersion)).toBe(true);
+      expect(fixture.command).toBe(desktopCommands.status);
+      expect(parseDesktopStatus(fixture.response)).toEqual({ message: "Desktop core is ready." });
+    }
   });
 });
