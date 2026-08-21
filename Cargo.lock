@@ -378,7 +378,7 @@ dependencies = [
 
 [[package]]
 name = "cipher-desktop"
-version = "0.1.0-prealpha.5"
+version = "0.1.0-prealpha.6"
 dependencies = [
  "cipher-types",
  "serde",
@@ -389,7 +389,7 @@ dependencies = [
 
 [[package]]
 name = "cipher-realtime-protocol"
-version = "0.1.0-prealpha.5"
+version = "0.1.0-prealpha.6"
 dependencies = [
  "cipher-types",
  "serde",
@@ -398,7 +398,7 @@ dependencies = [
 
 [[package]]
 name = "cipher-server"
-version = "0.1.0-prealpha.5"
+version = "0.1.0-prealpha.6"
 dependencies = [
  "axum",
  "cipher-types",
@@ -414,11 +414,11 @@ dependencies = [
 
 [[package]]
 name = "cipher-test-support"
-version = "0.1.0-prealpha.5"
+version = "0.1.0-prealpha.6"
 
 [[package]]
 name = "cipher-types"
-version = "0.1.0-prealpha.5"
+version = "0.1.0-prealpha.6"
 dependencies = [
  "serde",
  "serde_json",
