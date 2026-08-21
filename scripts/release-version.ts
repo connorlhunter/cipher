@@ -16,6 +16,10 @@ const versionedPathDependencies = [
     matcher: /(cipher-types = \{ path = "[^"]+", version = ")\^[^"]+(" \})/u,
     path: "apps/cipher-server/Cargo.toml",
   },
+  {
+    matcher: /(cipher-types = \{ path = "[^"]+", version = ")\^[^"]+(" \})/u,
+    path: "src-tauri/Cargo.toml",
+  },
 ] as const;
 
 /** Reads the canonical application release version from package.json. */

@@ -16,7 +16,7 @@ custom-protocol = ["tauri/custom-protocol"]
 tauri-build = { version = "^2.6.3", features = [] }
 
 [dependencies]
-cipher-types = { path = "../crates/cipher-types" }
+cipher-types = { path = "../crates/cipher-types", version = "^0.1.0-prealpha.5" }
 serde.workspace = true
 tauri = { version = "^2.11.5", features = [] }
 

@@ -8,6 +8,7 @@ const packageVersion = (JSON.parse(readFileSync("package.json", "utf8")) as { ve
 test("keeps application release metadata aligned", () => {
   const cargoManifest = readFileSync("Cargo.toml", "utf8");
   const serverManifest = readFileSync("apps/cipher-server/Cargo.toml", "utf8");
+  const desktopManifest = readFileSync("src-tauri/Cargo.toml", "utf8");
   const cargoLock = readFileSync("Cargo.lock", "utf8");
   const tauriVersion = (
     JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8")) as { version: string }
@@ -15,6 +16,9 @@ test("keeps application release metadata aligned", () => {
 
   expect(cargoManifest.match(/^version = "([^"]+)"/mu)?.[1]).toBe(packageVersion);
   expect(serverManifest.match(/cipher-types = \{[^\n]+version = "\^([^"]+)"/u)?.[1]).toBe(
+    packageVersion,
+  );
+  expect(desktopManifest.match(/cipher-types = \{[^\n]+version = "\^([^"]+)"/u)?.[1]).toBe(
     packageVersion,
   );
   expect(tauriVersion).toBe(packageVersion);
