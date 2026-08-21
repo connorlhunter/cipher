@@ -1,21 +1,11 @@
 //! Native desktop entry point and commands for Cipher.
 
-use serde::Serialize;
+mod ipc;
 
-/// Status returned to the webview by the desktop command.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct DesktopStatus {
-    /// Desktop status message.
-    message: &'static str,
-}
-
-/// Returns the desktop core's current status.
+/// Returns the desktop core's current status for a compatible webview.
 #[tauri::command]
-fn desktop_status() -> DesktopStatus {
-    DesktopStatus {
-        message: "Desktop core is ready.",
-    }
+fn desktop_status(protocol_version: Option<u16>) -> Result<ipc::DesktopStatus, ipc::IpcError> {
+    ipc::desktop_status(protocol_version)
 }
 
 fn main() {
@@ -27,10 +17,15 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::desktop_status;
+    use super::{desktop_status, ipc::CURRENT_PROTOCOL_VERSION};
 
     #[test]
     fn reports_the_desktop_core_status() {
-        assert_eq!(desktop_status().message, "Desktop core is ready.");
+        assert_eq!(
+            desktop_status(Some(CURRENT_PROTOCOL_VERSION))
+                .unwrap()
+                .message,
+            "Desktop core is ready."
+        );
     }
 }
