@@ -404,6 +404,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cipher-native-transport"
+version = "0.1.0-prealpha.6"
+dependencies = [
+ "cipher-realtime-protocol",
+ "cipher-types",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cipher-realtime-protocol"
 version = "0.1.0-prealpha.6"
 dependencies = [
