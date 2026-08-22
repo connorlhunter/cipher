@@ -32,9 +32,9 @@ Run these commands from an interactive terminal authenticated to the configured 
 
    ```sh
    bun --env-file=.env run infra:readiness
-   npm --prefix infra exec cdk -- diff \
+   npm --prefix infra run cdk -- diff \
      "$CIPHER_STATE_STACK" "$CIPHER_CONTROL_STACK"
-   npm --prefix infra exec cdk -- deploy \
+   npm --prefix infra run cdk -- deploy \
      "$CIPHER_STATE_STACK" "$CIPHER_CONTROL_STACK" \
      --require-approval any-change
    ```
@@ -76,4 +76,55 @@ The normal path is forward-fix: deploy a new immutable image tag. To roll back a
 - The monthly production budget tracks `user:Application$cipher`, alerts the configured mailbox at 80% actual spend and 100% forecast spend, and resources carry `Application`, `Environment`, `CostCenter`, and `ManagedBy` tags.
 - The ECS task role has no data-plane permissions until a concrete server feature needs one. The execution role can pull only Cipher's image, write only the retained server log group, and read the configured optional runtime secret.
 
-The control and state stacks remain protected during `infra:pause`; `infra:destroy-all` is reserved for an empty deployment drill and requires the separate unlock and data-destruction confirmations described in the lifecycle controls.
+## Lifecycle controls
+
+Pause removes only `CipherProductionRuntime` and `CipherProductionNetwork`.
+State, private media, the image repository, deployment access, backups, and
+retained logs stay in place. The command verifies the configured account and
+requires an interactive terminal:
+
+```sh
+bun --env-file=.env run infra:pause -- \
+  --confirm=PAUSE-CIPHER-PRODUCTION-<account-id>-us-east-1
+```
+
+Resume runs the same read-only readiness check again, then plans and restores
+all four stacks using one exact immutable image tag that already exists in the
+retained repository:
+
+```sh
+bun --env-file=.env run infra:resume -- \
+  --image-tag=<retained-immutable-server-image-tag> \
+  --confirm=RESUME-CIPHER-PRODUCTION-<account-id>-us-east-1
+```
+
+Both actions are repeatable. A paused runtime has no Fargate, load-balancer, or
+public-network hourly charge, while the retained state and control resources
+can still incur their documented storage costs.
+
+`infra:destroy-all` is reserved for the first empty-deployment drill before
+alpha data exists. Start with its non-mutating plan, which names only the four
+Cipher stacks:
+
+```sh
+bun --env-file=.env run infra:destroy-all -- \
+  --confirm=UNLOCK-CIPHER-PRODUCTION-<account-id>-us-east-1 \
+  --destroy-confirm=DESTROY-CIPHER-PRODUCTION-AND-ALL-DATA-<account-id>-us-east-1 \
+  --dry-run
+```
+
+Running the same command without `--dry-run` requires both confirmations and
+an interactive terminal in the configured production account. It first updates
+only State and Control with the destructive CDK context. That temporarily
+disables their deletion protection and switches their retained resources to
+deletion mode. It then removes the disposable Runtime and Network stacks,
+deletes recovery points returned by the exact
+`cipher-production-recovery` vault, and destroys Control before State. The
+destructive State synthesis empties the versioned media bucket; the destructive
+Control synthesis empties the retained ECR repository. The Route 53 hosted
+zone, ACM certificate, and CDK bootstrap remain outside this command.
+
+The command never claims instant physical erasure: AWS can retain
+provider-managed recovery material for a limited period, including Cognito and
+DynamoDB recovery data. Record the destruction receipt and verify the four
+named stacks are gone before closing the production account.

@@ -16,12 +16,12 @@ interface CloudFormationOutput {
   readonly Value?: unknown;
 }
 
-function stateTemplate(): Template {
+function stateTemplate(allowDestruction = false): Template {
   const app = new cdk.App();
   const stack = new cdk.Stack(app, "State", {
     env: { account: "123456789012", region: "us-east-1" },
   });
-  addStateFoundations(stack);
+  addStateFoundations(stack, { allowDestruction });
   return Template.fromStack(stack);
 }
 
@@ -259,6 +259,36 @@ describe("Cipher state foundations", () => {
     for (const prefix of ["pending/*", "ready/*", "fixtures/*"]) {
       assert.ok(prefixGuardJson.includes(prefix), `expected ${prefix} in the key guard`);
     }
+  });
+
+  test("switches every persistent state resource to destructive mode only when requested", () => {
+    const template = stateTemplate(true);
+    const userPool = onlyResource(template, "AWS::Cognito::UserPool");
+    const bucket = onlyResource(template, "AWS::S3::Bucket");
+    const tables = Object.values(
+      template.findResources("AWS::DynamoDB::Table"),
+    ) as CloudFormationResource[];
+    const resources = template.toJSON() as {
+      readonly Resources?: Record<string, { readonly Type?: unknown }>;
+    };
+
+    assert.equal(userPool.DeletionPolicy, "Delete");
+    assert.equal(userPool.UpdateReplacePolicy, "Delete");
+    assert.equal(properties(userPool).DeletionProtection, "INACTIVE");
+    assert.equal(bucket.DeletionPolicy, "Delete");
+    assert.equal(bucket.UpdateReplacePolicy, "Delete");
+    assert.equal(tables.length, 4);
+    for (const table of tables) {
+      assert.equal(table.DeletionPolicy, "Delete");
+      assert.equal(table.UpdateReplacePolicy, "Delete");
+      assert.equal(properties(table).DeletionProtectionEnabled, false);
+    }
+    assert.ok(
+      Object.values(resources.Resources ?? {}).some(
+        (resource) => resource.Type === "Custom::S3AutoDeleteObjects",
+      ),
+      "expected the destructive synthesis to empty versioned media objects before deletion",
+    );
   });
 
   test("publishes the authoritative values needed for runtime configuration", () => {

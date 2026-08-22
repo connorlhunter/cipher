@@ -6,6 +6,7 @@
     "node": ">=22 <27"
   },
   "scripts": {
+    "cdk": "cdk",
     "synth": "cdk synth",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsgo --noEmit -p tsconfig.json"

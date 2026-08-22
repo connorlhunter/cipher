@@ -26,7 +26,10 @@ const runtimeSettings = {
 };
 const controlSettings = { budgetAlertEmail: "production-alerts@example.invalid" };
 
-function templates(runtimeSecretArn?: string): { control: Template; runtime: Template } {
+function templates(
+  runtimeSecretArn?: string,
+  allowDestruction = false,
+): { control: Template; runtime: Template } {
   const app = new cdk.App();
   configureProductionNetworkContext(app, account, region);
   const environment = { account, region };
@@ -35,8 +38,11 @@ function templates(runtimeSecretArn?: string): { control: Template; runtime: Tem
   const networkStack = new cdk.Stack(app, "Network", { env: environment });
   const runtimeStack = new cdk.Stack(app, "Runtime", { env: environment });
 
-  const state = addStateFoundations(stateStack);
-  const control = addProductionControl(controlStack, state, controlSettings);
+  const state = addStateFoundations(stateStack, { allowDestruction });
+  const control = addProductionControl(controlStack, state, {
+    ...controlSettings,
+    allowDestruction,
+  });
   const network = addProductionNetwork(networkStack);
   addProductionRuntime(runtimeStack, network, state, control, {
     ...runtimeSettings,
@@ -126,6 +132,19 @@ describe("Cipher production control and runtime", () => {
     const lifecycle = repositoryProperties.LifecyclePolicy as { LifecyclePolicyText?: unknown };
     assert.equal(typeof lifecycle.LifecyclePolicyText, "string");
     assert.match(lifecycle.LifecyclePolicyText as string, /"countNumber":20/u);
+  });
+
+  test("switches retained operations resources to destructive mode only when requested", () => {
+    const template = templates(undefined, true).control;
+    const repository = onlyResource(template, "AWS::ECR::Repository");
+    const logGroup = onlyResource(template, "AWS::Logs::LogGroup");
+    const backupVault = onlyResource(template, "AWS::Backup::BackupVault");
+
+    for (const resource of [repository, logGroup, backupVault]) {
+      assert.equal(resource.DeletionPolicy, "Delete");
+      assert.equal(resource.UpdateReplacePolicy, "Delete");
+    }
+    assert.equal(properties(repository).EmptyOnDelete, true);
   });
 
   test("limits deployment identity, runtime roles, backup retention, and cost controls", () => {

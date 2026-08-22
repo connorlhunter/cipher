@@ -56,19 +56,32 @@ export interface StateFoundations {
   readonly mediaBucket: s3.Bucket;
 }
 
+/** Controls whether this synthesis is preparing persistent resources for destruction. */
+export interface StateFoundationSettings {
+  /** Enables removal only after the lifecycle command has received both confirmations. */
+  readonly allowDestruction: boolean;
+}
+
 /**
  * Adds the state stack resources required before the backend and network stacks exist.
  *
  * @param stack - Cipher's production state stack.
+ * @param settings - Persistent-resource retention mode for this synthesis.
  * @returns Resources whose deployed outputs fill the runtime environment.
  */
-export function addStateFoundations(stack: cdk.Stack): StateFoundations {
+export function addStateFoundations(
+  stack: cdk.Stack,
+  settings: StateFoundationSettings = { allowDestruction: false },
+): StateFoundations {
   addProductionTags(stack);
+  const removalPolicy = settings.allowDestruction
+    ? cdk.RemovalPolicy.DESTROY
+    : cdk.RemovalPolicy.RETAIN;
 
   const userPool = new cognito.UserPool(stack, "UserPool", {
     accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
     autoVerify: { email: true },
-    deletionProtection: true,
+    deletionProtection: !settings.allowDestruction,
     email: cognito.UserPoolEmail.withCognito(),
     mfa: cognito.Mfa.OPTIONAL,
     mfaSecondFactor: { email: false, otp: true, sms: false },
@@ -79,7 +92,7 @@ export function addStateFoundations(stack: cdk.Stack): StateFoundations {
       requireSymbols: true,
       requireUppercase: true,
     },
-    removalPolicy: cdk.RemovalPolicy.RETAIN,
+    removalPolicy,
     selfSignUpEnabled: false,
     signInAliases: { email: true },
     standardAttributes: { email: { mutable: true, required: true } },
@@ -99,22 +112,32 @@ export function addStateFoundations(stack: cdk.Stack): StateFoundations {
     userPoolClientName: resourceNames.nativeClient,
   });
 
-  const usersTable = createTable(stack, "Users", resourceNames.usersTable);
-  const conversationsTable = createTable(stack, "Conversations", resourceNames.conversationsTable);
+  const usersTable = createTable(stack, "Users", resourceNames.usersTable, settings);
+  const conversationsTable = createTable(
+    stack,
+    "Conversations",
+    resourceNames.conversationsTable,
+    settings,
+  );
   conversationsTable.addGlobalSecondaryIndex({
     indexName: "GSI1",
     partitionKey: { name: tableKeys.firstIndexPartition, type: dynamodb.AttributeType.STRING },
     sortKey: { name: tableKeys.firstIndexSort, type: dynamodb.AttributeType.STRING },
   });
 
-  const messagesTable = createTable(stack, "Messages", `${productionResourcePrefix}-messages`);
+  const messagesTable = createTable(
+    stack,
+    "Messages",
+    `${productionResourcePrefix}-messages`,
+    settings,
+  );
   messagesTable.addGlobalSecondaryIndex({
     indexName: "GSI1",
     partitionKey: { name: tableKeys.firstIndexPartition, type: dynamodb.AttributeType.STRING },
     sortKey: { name: tableKeys.firstIndexSort, type: dynamodb.AttributeType.STRING },
   });
 
-  const mediaTable = createTable(stack, "Media", resourceNames.mediaTable);
+  const mediaTable = createTable(stack, "Media", resourceNames.mediaTable, settings);
   mediaTable.addGlobalSecondaryIndex({
     indexName: "GSI1",
     partitionKey: { name: tableKeys.firstIndexPartition, type: dynamodb.AttributeType.STRING },
@@ -149,7 +172,8 @@ export function addStateFoundations(stack: cdk.Stack): StateFoundations {
       },
     ],
     objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
-    removalPolicy: cdk.RemovalPolicy.RETAIN,
+    autoDeleteObjects: settings.allowDestruction,
+    removalPolicy,
     versioned: true,
   });
   addMediaBucketGuards(mediaBucket);
@@ -180,19 +204,25 @@ export function addStateFoundations(stack: cdk.Stack): StateFoundations {
  * @param stack - Stack owning the table.
  * @param id - Stable construct identifier.
  * @param tableName - Stable production name for the table.
+ * @param settings - Persistent-resource retention mode for this synthesis.
  * @returns An on-demand, encrypted, protected table with TTL enabled.
  */
-function createTable(stack: cdk.Stack, id: string, tableName: string): dynamodb.Table {
+function createTable(
+  stack: cdk.Stack,
+  id: string,
+  tableName: string,
+  settings: StateFoundationSettings,
+): dynamodb.Table {
   return new dynamodb.Table(stack, id, {
     billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-    deletionProtection: true,
+    deletionProtection: !settings.allowDestruction,
     encryption: dynamodb.TableEncryption.AWS_MANAGED,
     partitionKey: { name: tableKeys.partition, type: dynamodb.AttributeType.STRING },
     pointInTimeRecoverySpecification: {
       pointInTimeRecoveryEnabled: true,
       recoveryPeriodInDays: pointInTimeRecoveryDays,
     },
-    removalPolicy: cdk.RemovalPolicy.RETAIN,
+    removalPolicy: settings.allowDestruction ? cdk.RemovalPolicy.DESTROY : cdk.RemovalPolicy.RETAIN,
     sortKey: { name: tableKeys.sort, type: dynamodb.AttributeType.STRING },
     tableName,
     timeToLiveAttribute: expiresAt,
