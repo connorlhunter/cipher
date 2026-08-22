@@ -55,9 +55,9 @@ State resources use stable `cipher-production-*` names. The media bucket include
 `CipherProductionNetwork` is the one two-AZ, public-subnet production VPC. It
 has no NAT gateway or parallel development, preview, or staging stack. Its
 security groups reserve public TCP 443 for the later load balancer and allow
-the service port only from that boundary. See
-[production network](./docs/production-network.md) for its CIDR, cost tags,
-deletion model, and change-control procedure.
+the service port only from that boundary. The published
+[Cipher documentation](https://artifacts.connorhunter.me/docs/cipher/index.html)
+covers its CIDR, cost tags, deletion model, and change-control procedure.
 
 Run `bun --env-file=.env run infra:readiness` before a production change.
 `infra:resume` checks the configured account, reruns that preflight, requires
@@ -70,8 +70,8 @@ console.
 `CipherProductionControl` retains the immutable server image repository, and
 `CipherProductionRuntime` runs one TLS load balancer plus one Fargate backend
 and realtime gateway task. Before the first deployment, use the guarded
-certificate command and bootstrap procedure in
-[production deployment controls](./docs/production-deployment.md), then use
-the protected GitHub workflow for every reviewed production change. See
-[production runtime](./docs/production-runtime.md) for the exact image,
-health-check, drain, and recovery sequence.
+certificate and bootstrap procedure in the published
+[Cipher documentation](https://artifacts.connorhunter.me/docs/cipher/index.html),
+then use the protected GitHub workflow for every reviewed production change.
+That documentation records the exact image, health-check, drain, and recovery
+sequence.
