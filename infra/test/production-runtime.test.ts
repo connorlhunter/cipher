@@ -24,8 +24,9 @@ const runtimeSettings = {
   certificateArn: `arn:aws:acm:${region}:${account}:certificate/00000000-0000-4000-8000-000000000000`,
   hostedZoneId: "Z000000000000000000000",
 };
+const controlSettings = { budgetAlertEmail: "production-alerts@example.invalid" };
 
-function templates(): { control: Template; runtime: Template } {
+function templates(runtimeSecretArn?: string): { control: Template; runtime: Template } {
   const app = new cdk.App();
   configureProductionNetworkContext(app, account, region);
   const environment = { account, region };
@@ -35,9 +36,12 @@ function templates(): { control: Template; runtime: Template } {
   const runtimeStack = new cdk.Stack(app, "Runtime", { env: environment });
 
   const state = addStateFoundations(stateStack);
-  const control = addProductionControl(controlStack);
+  const control = addProductionControl(controlStack, state, controlSettings);
   const network = addProductionNetwork(networkStack);
-  addProductionRuntime(runtimeStack, network, state, control, runtimeSettings);
+  addProductionRuntime(runtimeStack, network, state, control, {
+    ...runtimeSettings,
+    runtimeSecretArn,
+  });
 
   return { control: Template.fromStack(controlStack), runtime: Template.fromStack(runtimeStack) };
 }
@@ -50,6 +54,28 @@ function onlyResource(template: Template, type: string): CloudFormationResource 
   const matches = resources(template, type);
   assert.equal(matches.length, 1, `expected one ${type} resource`);
   return matches[0] as CloudFormationResource;
+}
+
+function roleByName(template: Template, roleName: string): CloudFormationResource {
+  const match = resources(template, "AWS::IAM::Role").find(
+    (resource) => properties(resource).RoleName === roleName,
+  );
+  assert.ok(match, `expected ${roleName}`);
+  return match;
+}
+
+function tags(resource: CloudFormationResource): Record<string, string> {
+  const declaredTags = properties(resource).Tags;
+  assert.ok(Array.isArray(declaredTags), "expected resource tags");
+  return Object.fromEntries(
+    declaredTags.map((tag) => {
+      assert.ok(typeof tag === "object" && tag !== null, "expected tag object");
+      const value = tag as { Key?: unknown; Value?: unknown };
+      assert.equal(typeof value.Key, "string", "expected tag key");
+      assert.equal(typeof value.Value, "string", "expected tag value");
+      return [value.Key, value.Value];
+    }),
+  );
 }
 
 function properties(resource: CloudFormationResource): Record<string, unknown> {
@@ -100,6 +126,79 @@ describe("Cipher production control and runtime", () => {
     const lifecycle = repositoryProperties.LifecyclePolicy as { LifecyclePolicyText?: unknown };
     assert.equal(typeof lifecycle.LifecyclePolicyText, "string");
     assert.match(lifecycle.LifecyclePolicyText as string, /"countNumber":20/u);
+  });
+
+  test("limits deployment identity, runtime roles, backup retention, and cost controls", () => {
+    const template = templates().control;
+    const document = template.toJSON() as { readonly Outputs?: Record<string, unknown> };
+    const provider = onlyResource(template, "AWS::IAM::OIDCProvider");
+    const deploymentRole = roleByName(template, "cipher-production-deployment");
+    const taskRole = roleByName(template, "cipher-production-task");
+    const executionRole = roleByName(template, "cipher-production-execution");
+    const backupRole = roleByName(template, "cipher-production-AWSBackup");
+    const backupVault = onlyResource(template, "AWS::Backup::BackupVault");
+    const backupPlan = onlyResource(template, "AWS::Backup::BackupPlan");
+    const backupSelection = onlyResource(template, "AWS::Backup::BackupSelection");
+    const budget = onlyResource(template, "AWS::Budgets::Budget");
+    const trust = properties(deploymentRole).AssumeRolePolicyDocument as {
+      Statement?: readonly { readonly Condition?: unknown; readonly Principal?: unknown }[];
+    };
+    const deploymentDocument = JSON.stringify(template.toJSON());
+
+    assert.deepEqual(properties(provider).ClientIdList, ["sts.amazonaws.com"]);
+    assert.equal(properties(provider).Url, "https://token.actions.githubusercontent.com");
+    assert.deepEqual(trust.Statement?.[0]?.Condition, {
+      StringEquals: {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+        "token.actions.githubusercontent.com:sub":
+          "repo:connorlhunter/cipher:environment:production",
+      },
+    });
+    assert.equal(properties(deploymentRole).MaxSessionDuration, 3600);
+    assert.deepEqual(tags(deploymentRole), {
+      Application: "cipher",
+      CostCenter: "cipher-production",
+      Environment: "production",
+      ManagedBy: "cdk",
+    });
+    assert.equal("ManagedPolicyArns" in properties(taskRole), false);
+    assert.equal("Policies" in properties(taskRole), false);
+    assert.equal(properties(executionRole).RoleName, "cipher-production-execution");
+    assert.match(
+      JSON.stringify(properties(backupRole).ManagedPolicyArns),
+      /AWSBackupServiceRolePolicyForBackup/u,
+    );
+    assert.equal(backupVault.DeletionPolicy, "Retain");
+    assert.equal(backupVault.UpdateReplacePolicy, "Retain");
+    assert.equal(properties(backupVault).BackupVaultName, "cipher-production-recovery");
+    assert.equal("EncryptionKeyArn" in properties(backupVault), false);
+    assert.ok(properties(backupPlan).BackupPlan, "expected a 35-day AWS Backup plan");
+    const backupSelectionProperties = properties(backupSelection).BackupSelection as {
+      readonly Resources?: unknown;
+    };
+    assert.ok(Array.isArray(backupSelectionProperties.Resources));
+    assert.equal(backupSelectionProperties.Resources.length, 4);
+    assert.deepEqual(properties(budget).Budget, {
+      BudgetLimit: { Amount: 50, Unit: "USD" },
+      BudgetName: "cipher-production-monthly",
+      BudgetType: "COST",
+      CostFilters: { TagKeyValue: ["user:Application$cipher"] },
+      TimeUnit: "MONTHLY",
+    });
+    assert.equal((properties(budget).NotificationsWithSubscribers as unknown[]).length, 2);
+    assert.doesNotMatch(deploymentDocument, /AdministratorAccess/u);
+    assert.doesNotMatch(deploymentDocument, /:iam:us-east-1:/u);
+    assert.match(deploymentDocument, /backup:StartBackupJob/u);
+    assert.match(deploymentDocument, /\/fixtures\/\*/u);
+    for (const output of [
+      "ServerRepositoryName",
+      "ServerRepositoryUri",
+      "DeploymentRoleArn",
+      "BackupRoleArn",
+      "BackupVaultName",
+    ]) {
+      assert.ok(document.Outputs?.[output], `expected ${output}`);
+    }
   });
 
   test("runs exactly one stop-before-start backend task behind TLS ingress", () => {
@@ -178,9 +277,10 @@ describe("Cipher production control and runtime", () => {
   });
 
   test("publishes one A alias and retains bounded production logs", () => {
-    const template = templates().runtime;
+    const { control, runtime } = templates();
+    const template = runtime;
     const alias = properties(onlyResource(template, "AWS::Route53::RecordSet"));
-    const logGroup = onlyResource(template, "AWS::Logs::LogGroup");
+    const logGroup = onlyResource(control, "AWS::Logs::LogGroup");
     const document = template.toJSON() as {
       readonly Parameters?: Record<string, Record<string, unknown>>;
     };
@@ -191,10 +291,8 @@ describe("Cipher production control and runtime", () => {
     assert.ok(alias.AliasTarget, "expected load balancer alias target");
     assert.equal(logGroup.DeletionPolicy, "Retain");
     assert.equal(logGroup.UpdateReplacePolicy, "Retain");
-    assert.deepEqual(properties(logGroup), {
-      LogGroupName: "/cipher/production/server",
-      RetentionInDays: 30,
-    });
+    assert.equal(properties(logGroup).LogGroupName, "/cipher/production/server");
+    assert.equal(properties(logGroup).RetentionInDays, 30);
     assert.deepEqual(document.Parameters?.ServerImageTag, {
       AllowedPattern: "[A-Za-z0-9][A-Za-z0-9._-]{0,127}",
       Default: "bootstrap",
@@ -202,5 +300,21 @@ describe("Cipher production control and runtime", () => {
       MinLength: 1,
       Type: "String",
     });
+  });
+
+  test("delivers an optional runtime secret only through the execution role", () => {
+    const runtimeSecretArn =
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:cipher-production-runtime-AbCdEf";
+    const { control, runtime } = templates(runtimeSecretArn);
+    const taskDefinition = properties(onlyResource(runtime, "AWS::ECS::TaskDefinition"));
+    const container = (
+      taskDefinition.ContainerDefinitions as readonly { readonly Secrets?: unknown }[]
+    )[0];
+
+    assert.ok(container, "expected one server container");
+    assert.deepEqual(container.Secrets, [
+      { Name: "CIPHER_RUNTIME_SECRET", ValueFrom: runtimeSecretArn },
+    ]);
+    assert.match(JSON.stringify(control.toJSON()), /secretsmanager:GetSecretValue/u);
   });
 });

@@ -1,0 +1,198 @@
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Immutable server image tag to deploy; defaults to this commit.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: cipher-production
+  cancel-in-progress: false
+
+env:
+  CDK_DEFAULT_ACCOUNT: ${{ vars.CIPHER_AWS_ACCOUNT_ID }}
+  CIPHER_ACM_CERTIFICATE_ARN: ${{ vars.CIPHER_ACM_CERTIFICATE_ARN }}
+  CIPHER_AWS_ACCOUNT_ID: ${{ vars.CIPHER_AWS_ACCOUNT_ID }}
+  CIPHER_AWS_REGION: ${{ vars.CIPHER_AWS_REGION }}
+  CIPHER_BUDGET_ALERT_EMAIL: ${{ vars.CIPHER_BUDGET_ALERT_EMAIL }}
+  CIPHER_CONTROL_STACK: ${{ vars.CIPHER_CONTROL_STACK }}
+  CIPHER_HOSTED_ZONE_ID: ${{ vars.CIPHER_HOSTED_ZONE_ID }}
+  CIPHER_NETWORK_STACK: ${{ vars.CIPHER_NETWORK_STACK }}
+  CIPHER_RUNTIME_SECRET_ARN: ${{ vars.CIPHER_RUNTIME_SECRET_ARN }}
+  CIPHER_RUNTIME_STACK: ${{ vars.CIPHER_RUNTIME_STACK }}
+  CIPHER_STATE_STACK: ${{ vars.CIPHER_STATE_STACK }}
+
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          aws-region: ${{ vars.CIPHER_AWS_REGION }}
+          role-session-name: cipher-production-plan-${{ github.run_id }}
+          role-to-assume: arn:aws:iam::${{ vars.CIPHER_AWS_ACCOUNT_ID }}:role/cipher-production-deployment
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: npm --prefix infra ci --ignore-scripts
+      - name: Verify production readiness
+        run: bun run infra:readiness
+      - name: Publish production change plan
+        run: |
+          npm --prefix infra exec cdk -- diff \
+            "$CIPHER_STATE_STACK" \
+            "$CIPHER_CONTROL_STACK" \
+            "$CIPHER_NETWORK_STACK" \
+            "$CIPHER_RUNTIME_STACK" | tee "$RUNNER_TEMP/cipher-production-plan.txt"
+          {
+            echo '## Production change plan'
+            echo
+            echo '```text'
+            sed -n '1,200p' "$RUNNER_TEMP/cipher-production-plan.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: plan
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          aws-region: ${{ vars.CIPHER_AWS_REGION }}
+          role-session-name: cipher-production-deploy-${{ github.run_id }}
+          role-to-assume: arn:aws:iam::${{ vars.CIPHER_AWS_ACCOUNT_ID }}:role/cipher-production-deployment
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: npm --prefix infra ci --ignore-scripts
+      - name: Verify production readiness
+        run: bun run infra:readiness
+      - name: Read protected stack outputs
+        run: |
+          stack_output() {
+            local stack_name="$1"
+            local output_key="$2"
+            local value
+            value="$(aws cloudformation describe-stacks \
+              --stack-name "$stack_name" \
+              --query "Stacks[0].Outputs[?OutputKey=='$output_key'].OutputValue | [0]" \
+              --output text)"
+            if [[ -z "$value" || "$value" == 'None' ]]; then
+              echo "Missing $output_key from $stack_name." >&2
+              exit 1
+            fi
+            printf '%s' "$value"
+          }
+
+          {
+            echo "CIPHER_SERVER_REPOSITORY_URI=$(stack_output "$CIPHER_CONTROL_STACK" ServerRepositoryUri)"
+            echo "CIPHER_BACKUP_ROLE_ARN=$(stack_output "$CIPHER_CONTROL_STACK" BackupRoleArn)"
+            echo "CIPHER_BACKUP_VAULT_NAME=$(stack_output "$CIPHER_CONTROL_STACK" BackupVaultName)"
+            echo "CIPHER_COGNITO_USER_POOL_ID=$(stack_output "$CIPHER_STATE_STACK" CognitoUserPoolId)"
+            echo "CIPHER_COGNITO_CLIENT_ID=$(stack_output "$CIPHER_STATE_STACK" CognitoUserPoolClientId)"
+            echo "CIPHER_USERS_TABLE=$(stack_output "$CIPHER_STATE_STACK" UsersTableName)"
+            echo "CIPHER_CONVERSATIONS_TABLE=$(stack_output "$CIPHER_STATE_STACK" ConversationsTableName)"
+            echo "CIPHER_MESSAGES_TABLE=$(stack_output "$CIPHER_STATE_STACK" MessagesTableName)"
+            echo "CIPHER_MEDIA_TABLE=$(stack_output "$CIPHER_STATE_STACK" MediaTableName)"
+            echo "CIPHER_MEDIA_BUCKET=$(stack_output "$CIPHER_STATE_STACK" MediaBucketName)"
+          } >> "$GITHUB_ENV"
+      - name: Build and publish the immutable server image
+        run: |
+          image_tag='${{ inputs.image_tag }}'
+          if [[ -z "$image_tag" ]]; then image_tag="$GITHUB_SHA"; fi
+          if ! [[ "$image_tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo 'The selected image tag is invalid.' >&2
+            exit 1
+          fi
+          aws ecr get-login-password | docker login \
+            --username AWS \
+            --password-stdin "${CIPHER_SERVER_REPOSITORY_URI%%/*}"
+          bun run server:image
+          docker tag cipher-server "$CIPHER_SERVER_REPOSITORY_URI:$image_tag"
+          docker push "$CIPHER_SERVER_REPOSITORY_URI:$image_tag"
+          echo "CIPHER_SERVER_IMAGE_TAG=$image_tag" >> "$GITHUB_ENV"
+      - name: Create bounded DynamoDB recovery points
+        run: |
+          backup_jobs=()
+          for table_name in \
+            "$CIPHER_USERS_TABLE" \
+            "$CIPHER_CONVERSATIONS_TABLE" \
+            "$CIPHER_MESSAGES_TABLE" \
+            "$CIPHER_MEDIA_TABLE"; do
+            job_id="$(aws backup start-backup-job \
+              --backup-vault-name "$CIPHER_BACKUP_VAULT_NAME" \
+              --resource-arn "arn:aws:dynamodb:$CIPHER_AWS_REGION:$CIPHER_AWS_ACCOUNT_ID:table/$table_name" \
+              --iam-role-arn "$CIPHER_BACKUP_ROLE_ARN" \
+              --lifecycle DeleteAfterDays=35 \
+              --idempotency-token "cipher-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$table_name" \
+              --query BackupJobId \
+              --output text)"
+            backup_jobs+=("$job_id")
+          done
+          for job_id in "${backup_jobs[@]}"; do
+            for attempt in $(seq 1 60); do
+              status="$(aws backup describe-backup-job --backup-job-id "$job_id" --query State --output text)"
+              case "$status" in
+                COMPLETED) break ;;
+                ABORTED|EXPIRED|FAILED)
+                  echo "Recovery point $job_id ended as $status." >&2
+                  exit 1
+                  ;;
+              esac
+              if [[ "$attempt" == 60 ]]; then
+                echo "Recovery point $job_id did not complete in time." >&2
+                exit 1
+              fi
+              sleep 10
+            done
+          done
+      - name: Deploy the reviewed production change
+        run: |
+          npm --prefix infra exec cdk -- deploy \
+            "$CIPHER_STATE_STACK" \
+            "$CIPHER_CONTROL_STACK" \
+            "$CIPHER_NETWORK_STACK" \
+            "$CIPHER_RUNTIME_STACK" \
+            --parameters "$CIPHER_RUNTIME_STACK:ServerImageTag=$CIPHER_SERVER_IMAGE_TAG" \
+            --require-approval never
+      - name: Verify HTTPS and native realtime ingress
+        run: |
+          aws ecs wait services-stable \
+            --cluster cipher-production \
+            --services cipher-production-server
+          curl --fail --retry 12 --retry-all-errors --retry-delay 10 --silent --show-error \
+            https://cipher.connorhunter.me/healthz
+          rustup toolchain install
+          CIPHER_INGRESS_ACCESS_TOKEN=deployment-smoke \
+            cargo test --locked -p cipher-native-transport \
+              production_ingress_serves_health_and_accepts_a_native_authorized_upgrade \
+              -- --ignored
+      - name: Run and clean up owned production fixtures
+        run: bun run live:fixtures

@@ -62,7 +62,16 @@ function requiredPresenceResources(
   config: InfrastructureConfig,
 ): Map<string, ReadonlyArray<string>> {
   return new Map<string, ReadonlyArray<string>>([
-    [config.stacks.control, ["AWS::ECR::Repository", "AWS::IAM::Role"]],
+    [
+      config.stacks.control,
+      [
+        "AWS::Backup::BackupVault",
+        "AWS::Budgets::Budget",
+        "AWS::ECR::Repository",
+        "AWS::IAM::OIDCProvider",
+        "AWS::IAM::Role",
+      ],
+    ],
     [config.stacks.network, ["AWS::EC2::VPC"]],
     [config.stacks.runtime, ["AWS::ElasticLoadBalancingV2::LoadBalancer", "AWS::ECS::Service"]],
   ]);

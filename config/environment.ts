@@ -4,8 +4,10 @@ export type Environment = Readonly<Record<string, string | undefined>>;
 /** Exact CloudFormation stack names for one Cipher deployment. */
 export interface InfrastructureConfig {
   awsRegion: string;
+  budgetAlertEmail: string;
   certificateArn: string;
   hostedZoneId: string;
+  runtimeSecretArn?: string;
   stacks: {
     state: string;
     control: string;
@@ -23,6 +25,20 @@ function required(environment: Environment, key: string): string {
   const value = environment[key];
   if (value === undefined || value.length === 0 || value.trim() !== value) {
     throw new Error(`${key} must be a non-empty value without surrounding whitespace.`);
+  }
+  return value;
+}
+
+/**
+ * @param environment - Environment variables to read.
+ * @param key - Optional variable name.
+ * @returns An optional non-empty value with no surrounding whitespace.
+ */
+function optional(environment: Environment, key: string): string | undefined {
+  const value = environment[key];
+  if (value === undefined || value.length === 0) return undefined;
+  if (value.trim() !== value) {
+    throw new Error(`${key} must not include surrounding whitespace.`);
   }
   return value;
 }
@@ -62,6 +78,31 @@ function hostedZoneId(value: string): string {
 }
 
 /**
+ * @param value - Cost-alert recipient address to validate.
+ * @returns A basic single-address value accepted by AWS Budgets.
+ */
+function budgetAlertEmail(value: string): string {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value)) {
+    throw new Error("CIPHER_BUDGET_ALERT_EMAIL must be one email address.");
+  }
+  return value;
+}
+
+/**
+ * @param value - Optional Secrets Manager ARN to validate.
+ * @returns A complete same-region secret ARN, or undefined when no runtime secret is needed.
+ */
+function runtimeSecretArn(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (!/^arn:aws:secretsmanager:us-east-1:\d{12}:secret:[A-Za-z0-9/_+=.@-]+$/u.test(value)) {
+    throw new Error(
+      "CIPHER_RUNTIME_SECRET_ARN must name a complete us-east-1 Secrets Manager secret ARN.",
+    );
+  }
+  return value;
+}
+
+/**
  * @param environment - Environment variables to load.
  * @returns Validated infrastructure configuration.
  */
@@ -73,8 +114,10 @@ export function loadInfrastructureConfig(environment: Environment): Infrastructu
 
   return {
     awsRegion,
+    budgetAlertEmail: budgetAlertEmail(required(environment, "CIPHER_BUDGET_ALERT_EMAIL")),
     certificateArn: certificateArn(required(environment, "CIPHER_ACM_CERTIFICATE_ARN")),
     hostedZoneId: hostedZoneId(required(environment, "CIPHER_HOSTED_ZONE_ID")),
+    runtimeSecretArn: runtimeSecretArn(optional(environment, "CIPHER_RUNTIME_SECRET_ARN")),
     stacks: {
       state: stackName(required(environment, "CIPHER_STATE_STACK"), "CIPHER_STATE_STACK"),
       control: stackName(required(environment, "CIPHER_CONTROL_STACK"), "CIPHER_CONTROL_STACK"),

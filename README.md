@@ -68,7 +68,9 @@ the AWS console.
 
 `CipherProductionControl` retains the immutable server image repository, and
 `CipherProductionRuntime` runs one TLS load balancer plus one Fargate backend
-and realtime gateway task. Before deploying either runtime stack, set the
-existing ACM certificate ARN and Route 53 hosted-zone ID in the ignored
-production `.env` file. See [production runtime](./docs/production-runtime.md)
-for the exact image, deployment, health-check, drain, and recovery sequence.
+and realtime gateway task. Before the first deployment, use the guarded
+certificate command and bootstrap procedure in
+[production deployment controls](./docs/production-deployment.md), then use
+the protected GitHub workflow for every reviewed production change. See
+[production runtime](./docs/production-runtime.md) for the exact image,
+health-check, drain, and recovery sequence.

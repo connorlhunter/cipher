@@ -96,9 +96,11 @@ export function addProductionNetwork(stack: cdk.Stack): ProductionNetwork {
 }
 
 /**
+ * Applies Cipher's ownership and cost-allocation tags to one production stack.
+ *
  * @param stack - Stack whose resources receive the production allocation tags.
  */
-function addProductionTags(stack: cdk.Stack): void {
+export function addProductionTags(stack: cdk.Stack): void {
   for (const [key, value] of Object.entries(productionNetworkTags)) {
     cdk.Tags.of(stack).add(key, value);
   }

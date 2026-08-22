@@ -35,7 +35,9 @@ const control = new cdk.Stack(app, config.stacks.control, {
   env: environment,
   terminationProtection: !allowPersistentDestruction,
 });
-const productionControl = addProductionControl(control);
+const productionControl = addProductionControl(control, stateFoundations, {
+  budgetAlertEmail: config.budgetAlertEmail,
+});
 
 const network = new cdk.Stack(app, config.stacks.network, {
   description: "Cipher production runtime network.",
@@ -52,8 +54,10 @@ const runtime = new cdk.Stack(app, config.stacks.runtime, {
 addProductionRuntime(runtime, productionNetwork, stateFoundations, productionControl, {
   certificateArn: config.certificateArn,
   hostedZoneId: config.hostedZoneId,
+  runtimeSecretArn: config.runtimeSecretArn,
 });
 
+control.addStackDependency(state);
 runtime.addStackDependency(state);
 runtime.addStackDependency(control);
 runtime.addStackDependency(network);
