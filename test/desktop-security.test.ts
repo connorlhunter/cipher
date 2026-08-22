@@ -58,21 +58,21 @@ const productionCsp = {
 };
 
 describe("desktop trust-boundary configuration", () => {
-  test("grants the bundled main webview only the allowlisted status command", () => {
+  test("grants the bundled main webview only the allowlisted desktop commands", () => {
     expect(capability).toMatchObject({
       identifier: "main-webview",
       local: true,
       platforms: ["macOS", "windows"],
-      permissions: ["allow-desktop-status"],
+      permissions: ["allow-desktop-status", "allow-desktop-diagnostics"],
       webviews: ["main"],
     });
     expect(capability.remote).toBeUndefined();
     expect(capability.windows).toBeUndefined();
-    expect(buildScript).toContain('AppManifest::new().commands(&["desktop_status"])');
+    expect(buildScript).toContain('commands(&["desktop_status", "desktop_diagnostics"])');
   });
 
   test("does not expose file, shell, or external-opening permissions", () => {
-    expect(capability.permissions).toEqual(["allow-desktop-status"]);
+    expect(capability.permissions).toEqual(["allow-desktop-status", "allow-desktop-diagnostics"]);
     expect(JSON.stringify(capability)).not.toMatch(/(?:fs|shell|opener):/u);
     expect(desktopManifest).not.toMatch(/tauri-plugin-(?:fs|shell|opener)/u);
   });
@@ -105,5 +105,7 @@ describe("desktop trust-boundary configuration", () => {
     expect(desktopEntryPoint).toContain(".on_navigation(security::allows_navigation)");
     expect(desktopEntryPoint).toContain("tauri::webview::NewWindowResponse::Deny");
     expect(desktopEntryPoint).toContain(".on_download(|_, _| false)");
+    expect(desktopEntryPoint).toContain("tauri_plugin_single_instance::init");
+    expect(desktopEntryPoint).toContain("lifecycle::handle_single_instance_launch");
   });
 });

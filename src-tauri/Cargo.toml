@@ -16,6 +16,7 @@ custom-protocol = ["tauri/custom-protocol"]
 tauri-build = { version = "^2.6.3", features = [] }
 
 [dependencies]
+cipher-desktop-lifecycle = { path = "../crates/cipher-desktop-lifecycle", version = "^0.1.0-prealpha.6" }
 cipher-types = { path = "../crates/cipher-types", version = "^0.1.0-prealpha.6" }
 cipher-native-transport = { path = "../crates/cipher-native-transport", version = "^0.1.0-prealpha.6" }
 keyring-core = "^1.0.0"
@@ -29,6 +30,9 @@ apple-native-keyring-store = { version = "^1.0.2", features = ["keychain"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-native-keyring-store = { version = "^1.1.0", default-features = false }
+
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+tauri-plugin-single-instance = "^2.4.3"
 
 [dev-dependencies]
 serde_json = "^1.0.151"

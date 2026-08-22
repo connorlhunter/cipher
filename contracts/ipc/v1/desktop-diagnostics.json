@@ -1,0 +1,12 @@
+{
+  "protocolVersion": 1,
+  "command": "desktop_diagnostics",
+  "response": {
+    "lifecycleState": "active",
+    "transportState": "ready",
+    "rendererEpoch": 1,
+    "activeOperations": 0,
+    "coldStarts": 1,
+    "wakes": 0
+  }
+}

@@ -3,7 +3,9 @@ import { listen } from "@tauri-apps/api/event";
 import {
   desktopCommands,
   desktopProtocol,
+  parseDesktopDiagnostics,
   parseDesktopStatus,
+  type DesktopDiagnostics,
   type DesktopStatus,
 } from "./desktop-contract";
 import {
@@ -12,7 +14,12 @@ import {
   type RendererPurgeReason,
 } from "./renderer-data-lifetime";
 
-export { parseDesktopStatus, type DesktopStatus } from "./desktop-contract";
+export {
+  parseDesktopDiagnostics,
+  parseDesktopStatus,
+  type DesktopDiagnostics,
+  type DesktopStatus,
+} from "./desktop-contract";
 
 /** Invokes and validates the native desktop-status command. */
 export async function desktopStatusWith(
@@ -46,4 +53,20 @@ export async function listenForRendererPurgeEvents(
     (eventName, handler) => listen(eventName, () => handler()),
     purge,
   );
+}
+
+/** Invokes and validates the native desktop-diagnostics command. */
+export async function desktopDiagnosticsWith(
+  invokeCommand: (command: string, arguments_: { protocolVersion: number }) => Promise<unknown>,
+): Promise<DesktopDiagnostics> {
+  return parseDesktopDiagnostics(
+    await invokeCommand(desktopCommands.diagnostics, { protocolVersion: desktopProtocol.current }),
+  );
+}
+
+/**
+ * @returns The validated, content-free diagnostic view from the native desktop core.
+ */
+export async function desktopDiagnostics(): Promise<DesktopDiagnostics> {
+  return desktopDiagnosticsWith((command, arguments_) => invoke<unknown>(command, arguments_));
 }

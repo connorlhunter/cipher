@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import { desktopStatusWith, parseDesktopStatus } from "../src/desktop";
+import {
+  desktopDiagnosticsWith,
+  desktopStatusWith,
+  parseDesktopDiagnostics,
+  parseDesktopStatus,
+} from "../src/desktop";
 import {
   desktopCommands,
   desktopProtocol,
@@ -62,5 +67,50 @@ describe("parseDesktopStatus", () => {
       expect(fixture.command).toBe(desktopCommands.status);
       expect(parseDesktopStatus(fixture.response)).toEqual({ message: "Desktop core is ready." });
     }
+  });
+});
+
+describe("parseDesktopDiagnostics", () => {
+  const diagnostic = {
+    lifecycleState: "active",
+    transportState: "ready",
+    rendererEpoch: 1,
+    activeOperations: 0,
+    coldStarts: 1,
+    wakes: 0,
+  } as const;
+
+  test("accepts the bounded diagnostics returned by the native command", async () => {
+    expect(parseDesktopDiagnostics(diagnostic)).toEqual(diagnostic);
+    await expect(
+      desktopDiagnosticsWith(async (command, arguments_) =>
+        command === desktopCommands.diagnostics &&
+        arguments_.protocolVersion === desktopProtocol.current
+          ? diagnostic
+          : {},
+      ),
+    ).resolves.toEqual(diagnostic);
+  });
+
+  test.each([
+    null,
+    {},
+    { ...diagnostic, token: "forbidden" },
+    { ...diagnostic, lifecycleState: "unknown" },
+    { ...diagnostic, activeOperations: 33 },
+    { ...diagnostic, rendererEpoch: -1 },
+    { ...diagnostic, wakes: Number.MAX_SAFE_INTEGER + 1 },
+  ])("rejects non-display diagnostics %p", (value) => {
+    expect(() => parseDesktopDiagnostics(value)).toThrow("invalid diagnostics");
+  });
+
+  test("keeps the version-one diagnostic fixture compatible", () => {
+    const fixture = JSON.parse(
+      readFileSync("contracts/ipc/v1/desktop-diagnostics.json", "utf8"),
+    ) as { command: string; protocolVersion: number; response: unknown };
+
+    expect(fixture.command).toBe(desktopCommands.diagnostics);
+    expect(fixture.protocolVersion).toBe(desktopProtocol.current);
+    expect(parseDesktopDiagnostics(fixture.response)).toEqual(diagnostic);
   });
 });

@@ -56,11 +56,29 @@ impl IpcError {
             message: "This desktop version is not compatible with the native core.",
         }
     }
+
+    /// Creates a generic native-service response without implementation details.
+    pub const fn unavailable() -> Self {
+        Self {
+            code: IpcErrorCode::Unavailable,
+            message: "This desktop service is not available.",
+        }
+    }
 }
 
 /// Returns whether the supplied desktop protocol version is compatible.
 pub fn supports_protocol_version(version: ProtocolVersion) -> bool {
     version == CURRENT_PROTOCOL_VERSION || version == PREVIOUS_PROTOCOL_VERSION
+}
+
+/// Requires the current version for a command introduced after protocol version zero.
+pub fn require_current_protocol_version(protocol_version: Option<u16>) -> Result<(), IpcError> {
+    if ProtocolVersion::new(protocol_version.unwrap_or(PREVIOUS_PROTOCOL_VERSION.get()))
+        != CURRENT_PROTOCOL_VERSION
+    {
+        return Err(IpcError::unsupported_version());
+    }
+    Ok(())
 }
 
 /// Returns the bounded status view for a compatible caller.
@@ -81,7 +99,8 @@ mod tests {
 
     use super::{
         CURRENT_PROTOCOL_VERSION, IpcErrorCode, MAX_STATUS_MESSAGE_LENGTH,
-        PREVIOUS_PROTOCOL_VERSION, desktop_status, supports_protocol_version,
+        PREVIOUS_PROTOCOL_VERSION, desktop_status, require_current_protocol_version,
+        supports_protocol_version,
     };
 
     #[test]
@@ -103,6 +122,13 @@ mod tests {
     fn rejects_an_unsupported_protocol_version() {
         let error = desktop_status(Some(CURRENT_PROTOCOL_VERSION.get() + 1)).unwrap_err();
         assert_eq!(error.code, IpcErrorCode::UnsupportedVersion);
+    }
+
+    #[test]
+    fn reserves_new_commands_for_the_current_protocol_version() {
+        assert!(require_current_protocol_version(Some(CURRENT_PROTOCOL_VERSION.get())).is_ok());
+        assert!(require_current_protocol_version(Some(PREVIOUS_PROTOCOL_VERSION.get())).is_err());
+        assert!(require_current_protocol_version(None).is_err());
     }
 
     #[test]
