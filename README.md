@@ -49,3 +49,17 @@ The state policy enforces TLS, SSE-S3, and those key roots. A later signed uploa
 `bun run infra:readiness` requires exactly one Cognito pool, four DynamoDB tables, one S3 bucket, and the seven configuration outputs above in the synthesized state stack. It retains presence-only checks for the control, network, and runtime stacks while those foundations are completed.
 
 State resources use stable `cipher-production-*` names. The media bucket includes the account and region because S3 bucket names are global; the stack outputs remain the source for runtime configuration.
+
+## Production network
+
+`CipherProductionNetwork` is the one two-AZ, public-subnet production VPC. It
+has no NAT gateway or parallel development, preview, or staging stack. Its
+security groups reserve public TCP 443 for the later load balancer and allow
+the service port only from that boundary. See
+[production network](./docs/production-network.md) for its CIDR, cost tags,
+deletion model, and change-control procedure.
+
+Run `bun --env-file=.env run infra:readiness` before a production change.
+`infra:resume` checks the configured account and requires an interactive,
+explicit CDK approval for every change; do not apply network changes through
+the AWS console.

@@ -1,6 +1,7 @@
 /** Defines Cipher's four production CloudFormation stack boundaries. */
 import * as cdk from "aws-cdk-lib";
 import { loadInfrastructureConfig } from "../../config/environment.js";
+import { addProductionNetwork } from "../lib/production-network.js";
 import { addStateFoundations } from "../lib/state-foundations.js";
 
 const config = loadInfrastructureConfig(process.env);
@@ -34,6 +35,7 @@ const network = new cdk.Stack(app, config.stacks.network, {
   env: environment,
   terminationProtection: false,
 });
+addProductionNetwork(network);
 
 const runtime = new cdk.Stack(app, config.stacks.runtime, {
   description: "Cipher production ingress and backend runtime.",

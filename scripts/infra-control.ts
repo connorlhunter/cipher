@@ -42,16 +42,30 @@ interface ParsedArguments {
   dryRun: boolean;
 }
 
+/**
+ * Runs CDK in the operator's terminal so the change plan and approval prompt
+ * remain visible; account checks keep their output captured for validation.
+ */
 export const liveRunner: CommandRunner = {
   run(command) {
-    const result = Bun.spawnSync(command, { stderr: "pipe", stdout: "pipe" });
+    const isCdkCommand = command[0] === "npm" && command.includes("cdk");
+    const result = Bun.spawnSync(command, {
+      stderr: isCdkCommand ? "inherit" : "pipe",
+      stdin: isCdkCommand ? "inherit" : "ignore",
+      stdout: isCdkCommand ? "inherit" : "pipe",
+    });
     return {
       exitCode: result.exitCode,
-      stderr: new TextDecoder().decode(result.stderr),
-      stdout: new TextDecoder().decode(result.stdout),
+      stderr: decodeOutput(result.stderr),
+      stdout: decodeOutput(result.stdout),
     };
   },
 };
+
+/** @returns Decoded captured output, or an empty value when the stream was inherited. */
+function decodeOutput(output: Uint8Array | undefined): string {
+  return output === undefined ? "" : new TextDecoder().decode(output);
+}
 
 /**
  * @param args - Command-line arguments to parse.
@@ -110,13 +124,20 @@ export function plannedCommands(
     case "resume":
       return [
         cdkCommand(
+          "diff",
+          config.stacks.state,
+          config.stacks.control,
+          config.stacks.network,
+          config.stacks.runtime,
+        ),
+        cdkCommand(
           "deploy",
           config.stacks.state,
           config.stacks.control,
           config.stacks.network,
           config.stacks.runtime,
           "--require-approval",
-          "never",
+          "any-change",
         ),
       ];
     case "destroy-all":
@@ -127,7 +148,7 @@ export function plannedCommands(
           "--context",
           "cipher:allow-persistent-destruction=true",
           "--require-approval",
-          "never",
+          "any-change",
         ),
         ...disposableStacks.map((stack) => cdkCommand("destroy", stack, "--force")),
         ...persistentStacks.map((stack) => cdkCommand("destroy", stack, "--force")),
@@ -280,7 +301,7 @@ function existingCommands(
                 "--context",
                 "cipher:allow-persistent-destruction=true",
                 "--require-approval",
-                "never",
+                "any-change",
               ),
             ]),
         ...existingDisposableStacks.map((stack) => cdkCommand("destroy", stack, "--force")),
