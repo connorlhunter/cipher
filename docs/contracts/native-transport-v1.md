@@ -31,3 +31,10 @@ cursor, or transport diagnostic with endpoint material across IPC.
 The platform credential store supplies persisted refresh material and local
 wrapping keys to native authentication code. It is not a WebView storage API;
 the renderer cannot read or replace entries directly.
+
+`CredentialSessionAuthenticator` is the desktop integration point between the
+platform credential store and a Rust-owned refresh-material exchanger. It loads
+one opaque refresh-material entry, checks cancellation before and after use,
+and produces a non-serializable access token only for native HTTP or realtime
+clients. Missing, corrupt, locked, or unavailable credential-store entries
+never trigger a plaintext, browser, or in-memory fallback.
