@@ -1,10 +1,12 @@
 /** Defines Cipher's four production CloudFormation stack boundaries. */
 import * as cdk from "aws-cdk-lib";
 import { loadInfrastructureConfig } from "../../config/environment.js";
+import { addProductionControl } from "../lib/production-control.js";
 import {
   addProductionNetwork,
   configureProductionNetworkContext,
 } from "../lib/production-network.js";
+import { addProductionRuntime } from "../lib/production-runtime.js";
 import { addStateFoundations } from "../lib/state-foundations.js";
 
 const config = loadInfrastructureConfig(process.env);
@@ -26,25 +28,30 @@ const state = new cdk.Stack(app, config.stacks.state, {
   env: environment,
   terminationProtection: !allowPersistentDestruction,
 });
-addStateFoundations(state);
+const stateFoundations = addStateFoundations(state);
 
 const control = new cdk.Stack(app, config.stacks.control, {
   description: "Cipher production image, deployment identity, and retained operations data.",
   env: environment,
   terminationProtection: !allowPersistentDestruction,
 });
+const productionControl = addProductionControl(control);
 
 const network = new cdk.Stack(app, config.stacks.network, {
   description: "Cipher production runtime network.",
   env: environment,
   terminationProtection: false,
 });
-addProductionNetwork(network);
+const productionNetwork = addProductionNetwork(network);
 
 const runtime = new cdk.Stack(app, config.stacks.runtime, {
   description: "Cipher production ingress and backend runtime.",
   env: environment,
   terminationProtection: false,
+});
+addProductionRuntime(runtime, productionNetwork, stateFoundations, productionControl, {
+  certificateArn: config.certificateArn,
+  hostedZoneId: config.hostedZoneId,
 });
 
 runtime.addStackDependency(state);

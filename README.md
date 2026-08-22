@@ -63,3 +63,12 @@ Run `bun --env-file=.env run infra:readiness` before a production change.
 `infra:resume` checks the configured account and requires an interactive,
 explicit CDK approval for every change; do not apply network changes through
 the AWS console.
+
+## Production runtime
+
+`CipherProductionControl` retains the immutable server image repository, and
+`CipherProductionRuntime` runs one TLS load balancer plus one Fargate backend
+and realtime gateway task. Before deploying either runtime stack, set the
+existing ACM certificate ARN and Route 53 hosted-zone ID in the ignored
+production `.env` file. See [production runtime](./docs/production-runtime.md)
+for the exact image, deployment, health-check, drain, and recovery sequence.
