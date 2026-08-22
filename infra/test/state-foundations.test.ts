@@ -250,7 +250,9 @@ describe("Cipher state foundations", () => {
       Null: { "s3:x-amz-content-sha256": "true" },
     });
     assert.deepEqual(statementBySid(statements, "DenyUnsignedPayload").Condition, {
-      StringEquals: { "s3:x-amz-content-sha256": "UNSIGNED-PAYLOAD" },
+      StringLike: {
+        "s3:x-amz-content-sha256": ["UNSIGNED-PAYLOAD", "STREAMING-UNSIGNED-PAYLOAD*"],
+      },
     });
     assert.deepEqual(statementBySid(statements, "DenyMissingS3ManagedEncryption").Condition, {
       Null: { "s3:x-amz-server-side-encryption": "true" },
