@@ -5,6 +5,8 @@ import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
 
+import { addProductionTags } from "./production-network.js";
+
 /** Object-key roots reserved for the encrypted media workflow. */
 export const mediaObjectPrefixes = {
   fixture: "fixtures/",
@@ -61,6 +63,8 @@ export interface StateFoundations {
  * @returns Resources whose deployed outputs fill the runtime environment.
  */
 export function addStateFoundations(stack: cdk.Stack): StateFoundations {
+  addProductionTags(stack);
+
   const userPool = new cognito.UserPool(stack, "UserPool", {
     accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
     autoVerify: { email: true },
@@ -129,6 +133,10 @@ export function addStateFoundations(stack: cdk.Stack): StateFoundations {
     enforceSSL: true,
     lifecycleRules: [
       {
+        id: "ExpireNoncurrentCiphertextVersions",
+        noncurrentVersionExpiration: cdk.Duration.days(pointInTimeRecoveryDays),
+      },
+      {
         abortIncompleteMultipartUploadAfter: pendingObjectLifetime,
         expiration: pendingObjectLifetime,
         id: "ExpirePendingCiphertext",
@@ -142,6 +150,7 @@ export function addStateFoundations(stack: cdk.Stack): StateFoundations {
     ],
     objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
     removalPolicy: cdk.RemovalPolicy.RETAIN,
+    versioned: true,
   });
   addMediaBucketGuards(mediaBucket);
 

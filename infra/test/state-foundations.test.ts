@@ -208,8 +208,14 @@ describe("Cipher state foundations", () => {
     assert.deepEqual(bucketProperties.OwnershipControls, {
       Rules: [{ ObjectOwnership: "BucketOwnerEnforced" }],
     });
+    assert.deepEqual(bucketProperties.VersioningConfiguration, { Status: "Enabled" });
     assert.deepEqual(bucketProperties.LifecycleConfiguration, {
       Rules: [
+        {
+          Id: "ExpireNoncurrentCiphertextVersions",
+          NoncurrentVersionExpiration: { NoncurrentDays: 35 },
+          Status: "Enabled",
+        },
         {
           AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 },
           ExpirationInDays: 1,

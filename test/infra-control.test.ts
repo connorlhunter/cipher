@@ -15,6 +15,7 @@ const config = loadInfrastructureConfig({
   CIPHER_ACM_CERTIFICATE_ARN:
     "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-4000-8000-000000000000",
   CIPHER_AWS_REGION: "us-east-1",
+  CIPHER_BUDGET_ALERT_EMAIL: "production-alerts@example.invalid",
   CIPHER_STATE_STACK: "CipherProductionState",
   CIPHER_CONTROL_STACK: "CipherProductionControl",
   CIPHER_HOSTED_ZONE_ID: "Z000000000000000000000",

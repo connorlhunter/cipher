@@ -6,6 +6,7 @@ const validEnvironment = {
   CIPHER_ACM_CERTIFICATE_ARN:
     "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-4000-8000-000000000000",
   CIPHER_AWS_REGION: "us-east-1",
+  CIPHER_BUDGET_ALERT_EMAIL: "production-alerts@example.invalid",
   CIPHER_CONTROL_STACK: "CipherProductionControl",
   CIPHER_HOSTED_ZONE_ID: "Z000000000000000000000",
   CIPHER_NETWORK_STACK: "CipherProductionNetwork",
@@ -30,5 +31,13 @@ describe("infrastructure environment", () => {
     expect(() =>
       loadInfrastructureConfig({ ...validEnvironment, CIPHER_AWS_REGION: "east" }),
     ).toThrow("CIPHER_AWS_REGION must be an AWS region name");
+    expect(() =>
+      loadInfrastructureConfig({ ...validEnvironment, CIPHER_BUDGET_ALERT_EMAIL: "not-an-email" }),
+    ).toThrow("CIPHER_BUDGET_ALERT_EMAIL must be one email address");
+    expect(() =>
+      loadInfrastructureConfig({ ...validEnvironment, CIPHER_RUNTIME_SECRET_ARN: "invalid" }),
+    ).toThrow(
+      "CIPHER_RUNTIME_SECRET_ARN must name a complete us-east-1 Secrets Manager secret ARN",
+    );
   });
 });
