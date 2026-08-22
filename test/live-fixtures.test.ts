@@ -80,7 +80,9 @@ function rejectsInvalidFixturePut(command: ReadonlyArray<string>): boolean {
   return (
     key.includes("missing-encryption") ||
     key.includes("wrong-encryption") ||
-    key.startsWith("outside-cipher-prefix/")
+    key.startsWith("outside-cipher-prefix/") ||
+    key.includes("unsigned-payload") ||
+    key.includes("unauthenticated-caller")
   );
 }
 
@@ -129,7 +131,11 @@ describe("live fixture scope", () => {
       },
     };
 
-    expect(runLiveFixtureCheck(config, runner, runId)).toHaveLength(4);
+    const result = runLiveFixtureCheck(config, runner, runId);
+    expect(result).toHaveLength(4);
+    expect(result).toContain(
+      "Rejected unauthenticated and unsigned payloads, missing or wrong SSE-S3, and out-of-prefix uploads; HeadObject matched checksum, length, and SSE-S3 metadata.",
+    );
     const deleteCommands = commands.filter(
       (command) => command[2] === "delete-item" || command[2] === "delete-object",
     );
@@ -157,7 +163,7 @@ describe("live fixture scope", () => {
     expect(checksummedPut).toContain(fixtureChecksum);
 
     const rejectedPuts = commands.filter(rejectsInvalidFixturePut);
-    expect(rejectedPuts).toHaveLength(3);
+    expect(rejectedPuts).toHaveLength(5);
   });
 
   test("rejects a fixture whose HeadObject metadata does not match its signed upload", () => {

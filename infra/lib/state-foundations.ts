@@ -236,6 +236,26 @@ function addMediaBucketGuards(bucket: s3.Bucket): void {
   bucket.addToResourcePolicy(
     new iam.PolicyStatement({
       actions: ["s3:PutObject"],
+      conditions: { Null: { "s3:x-amz-content-sha256": "true" } },
+      effect: iam.Effect.DENY,
+      principals: [new iam.AnyPrincipal()],
+      resources: [bucket.arnForObjects("*")],
+      sid: "DenyMissingPayloadChecksum",
+    }),
+  );
+  bucket.addToResourcePolicy(
+    new iam.PolicyStatement({
+      actions: ["s3:PutObject"],
+      conditions: { StringEquals: { "s3:x-amz-content-sha256": "UNSIGNED-PAYLOAD" } },
+      effect: iam.Effect.DENY,
+      principals: [new iam.AnyPrincipal()],
+      resources: [bucket.arnForObjects("*")],
+      sid: "DenyUnsignedPayload",
+    }),
+  );
+  bucket.addToResourcePolicy(
+    new iam.PolicyStatement({
+      actions: ["s3:PutObject"],
       conditions: { Null: { "s3:x-amz-server-side-encryption": "true" } },
       effect: iam.Effect.DENY,
       principals: [new iam.AnyPrincipal()],

@@ -171,6 +171,8 @@ export function runLiveFixtureCheck(
   const fixtureItem = fixtureDynamoItem(scope, "record");
   const sentinelItem = sentinelDynamoItem(scope, "sentinel");
   const temporaryDirectory = mkdtempSync(join(tmpdir(), "cipher-live-fixture-"));
+  const payloadSigning =
+    runner === liveRunner ? createPayloadSigningConfig(temporaryDirectory) : undefined;
   const payload = join(temporaryDirectory, "ciphertext.bin");
   const payloadContents = "cipher live fixture\n";
   const payloadChecksum = sha256Base64(payloadContents);
@@ -196,34 +198,99 @@ export function runLiveFixtureCheck(
     sentinelItemCreated = true;
     assertDynamoMarker(config, runner, fixtureItem, scope.id);
 
-    assertInvalidS3WritesAreRejected(config, runner, scope, payload);
-    putFixtureObject(config, runner, fixtureKey, payload, scope.id, payloadChecksum);
+    withAwsConfig(payloadSigning?.signed, () =>
+      assertInvalidS3WritesAreRejected(
+        config,
+        runner,
+        payloadSigning === undefined ? runner : configuredLiveRunner(payloadSigning.unsigned),
+        scope,
+        payload,
+      ),
+    );
+    withAwsConfig(payloadSigning?.signed, () =>
+      putFixtureObject(config, runner, fixtureKey, payload, scope.id, payloadChecksum),
+    );
     fixtureObjectCreated = true;
-    putFixtureObject(config, runner, sentinelKey, payload);
+    withAwsConfig(payloadSigning?.signed, () =>
+      putFixtureObject(config, runner, sentinelKey, payload),
+    );
     sentinelObjectCreated = true;
-    assertObjectIntegrity(config, runner, fixtureKey, payloadChecksum, payloadLength);
-    assertObjectMarker(config, runner, fixtureKey, scope.id);
+    withAwsConfig(payloadSigning?.signed, () => {
+      assertObjectIntegrity(config, runner, fixtureKey, payloadChecksum, payloadLength);
+      assertObjectMarker(config, runner, fixtureKey, scope.id);
+    });
 
     deleteMarkedDynamoItem(config, runner, fixtureItem, scope.id);
     fixtureItemCreated = false;
-    deleteMarkedObject(config, runner, fixtureKey, scope.id);
+    withAwsConfig(payloadSigning?.signed, () =>
+      deleteMarkedObject(config, runner, fixtureKey, scope.id),
+    );
     fixtureObjectCreated = false;
     assertDynamoItemExists(config, runner, sentinelItem);
-    assertObjectExists(config, runner, sentinelKey);
+    withAwsConfig(payloadSigning?.signed, () => assertObjectExists(config, runner, sentinelKey));
 
     return [
       `Created, checked, and removed two Cognito fixtures in ${scope.namespace}.`,
       `Created, checksummed, and removed only marked DynamoDB and S3 fixtures for ${scope.id}.`,
-      "Rejected missing or wrong SSE-S3 and out-of-prefix uploads; HeadObject matched checksum, length, and SSE-S3 metadata.",
+      "Rejected unauthenticated and unsigned payloads, missing or wrong SSE-S3, and out-of-prefix uploads; HeadObject matched checksum, length, and SSE-S3 metadata.",
       "Verified that unmarked same-prefix sentinel resources remained untouched.",
     ];
   } finally {
-    if (fixtureObjectCreated) deleteMarkedObject(config, runner, fixtureKey, scope.id);
-    if (sentinelObjectCreated) deleteExactObject(config, runner, sentinelKey);
+    if (fixtureObjectCreated)
+      withAwsConfig(payloadSigning?.signed, () =>
+        deleteMarkedObject(config, runner, fixtureKey, scope.id),
+      );
+    if (sentinelObjectCreated)
+      withAwsConfig(payloadSigning?.signed, () => deleteExactObject(config, runner, sentinelKey));
     if (fixtureItemCreated) deleteMarkedDynamoItem(config, runner, fixtureItem, scope.id);
     if (sentinelItemCreated) deleteExactDynamoItem(config, runner, sentinelItem);
     for (const username of createdUsers.reverse()) deleteExactUser(config, runner, username);
     rmSync(temporaryDirectory, { force: true, recursive: true });
+  }
+}
+
+interface PayloadSigningConfig {
+  readonly signed: string;
+  readonly unsigned: string;
+}
+
+function createPayloadSigningConfig(directory: string): PayloadSigningConfig {
+  const profile = process.env.AWS_PROFILE?.trim() || "default";
+  const section = profile === "default" ? "[default]" : `[profile ${profile}]`;
+  const writeConfig = (name: string, enabled: boolean): string => {
+    const file = join(directory, name);
+    writeFileSync(
+      file,
+      `${section}\ns3 =\n  payload_signing_enabled = ${enabled ? "true" : "false"}\n`,
+      { mode: 0o600 },
+    );
+    return file;
+  };
+
+  return {
+    signed: writeConfig("aws-signed-payload.config", true),
+    unsigned: writeConfig("aws-unsigned-payload.config", false),
+  };
+}
+
+function configuredLiveRunner(configFile: string): CommandRunner {
+  return {
+    run(command) {
+      return withAwsConfig(configFile, () => liveRunner.run(command));
+    },
+  };
+}
+
+function withAwsConfig<T>(configFile: string | undefined, action: () => T): T {
+  if (configFile === undefined) return action();
+
+  const originalConfig = process.env.AWS_CONFIG_FILE;
+  process.env.AWS_CONFIG_FILE = configFile;
+  try {
+    return action();
+  } finally {
+    if (originalConfig === undefined) delete process.env.AWS_CONFIG_FILE;
+    else process.env.AWS_CONFIG_FILE = originalConfig;
   }
 }
 
@@ -534,13 +601,14 @@ function putFixtureObject(
 
 function assertInvalidS3WritesAreRejected(
   config: LiveFixtureConfig,
-  runner: CommandRunner,
+  signedRunner: CommandRunner,
+  unsignedRunner: CommandRunner,
   scope: FixtureScope,
   payload: string,
 ): void {
   assertPutObjectRejected(
     config,
-    runner,
+    signedRunner,
     scope.objectKey("missing-encryption"),
     payload,
     [],
@@ -548,7 +616,7 @@ function assertInvalidS3WritesAreRejected(
   );
   assertPutObjectRejected(
     config,
-    runner,
+    signedRunner,
     scope.objectKey("wrong-encryption"),
     payload,
     ["--server-side-encryption", "aws:kms"],
@@ -556,11 +624,27 @@ function assertInvalidS3WritesAreRejected(
   );
   assertPutObjectRejected(
     config,
-    runner,
+    signedRunner,
     `outside-cipher-prefix/${scope.id}/ciphertext`,
     payload,
     ["--server-side-encryption", "AES256"],
     "a key outside Cipher's allowed prefixes",
+  );
+  assertPutObjectRejected(
+    config,
+    unsignedRunner,
+    scope.objectKey("unsigned-payload"),
+    payload,
+    ["--server-side-encryption", "AES256"],
+    "an unsigned payload",
+  );
+  assertPutObjectRejected(
+    config,
+    signedRunner,
+    scope.objectKey("unauthenticated-caller"),
+    payload,
+    ["--server-side-encryption", "AES256", "--no-sign-request"],
+    "an unauthenticated caller",
   );
 }
 
