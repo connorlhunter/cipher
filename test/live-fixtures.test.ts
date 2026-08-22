@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -9,6 +11,8 @@ import {
 } from "../scripts/live-fixtures";
 
 const runId = "550e8400-e29b-41d4-a716-446655440000";
+const fixturePayload = "cipher live fixture\n";
+const fixtureChecksum = createHash("sha256").update(fixturePayload).digest("base64");
 const fixtureEnvironment = {
   CIPHER_AWS_ACCOUNT_ID: "123456789012",
   CIPHER_AWS_REGION: "us-east-1",
@@ -60,7 +64,24 @@ function response(command: ReadonlyArray<string>): string {
   if (command[1] === "s3api" && command[2] === "get-object-tagging") {
     return JSON.stringify({ TagSet: [{ Key: "fixture-run-id", Value: runId }] });
   }
+  if (command[1] === "s3api" && command[2] === "head-object") {
+    return JSON.stringify({
+      ChecksumSHA256: fixtureChecksum,
+      ContentLength: Buffer.byteLength(fixturePayload, "utf8"),
+      ServerSideEncryption: "AES256",
+    });
+  }
   return "{}";
+}
+
+function rejectsInvalidFixturePut(command: ReadonlyArray<string>): boolean {
+  if (command[1] !== "s3api" || command[2] !== "put-object") return false;
+  const key = command[command.indexOf("--key") + 1] ?? "";
+  return (
+    key.includes("missing-encryption") ||
+    key.includes("wrong-encryption") ||
+    key.startsWith("outside-cipher-prefix/")
+  );
 }
 
 describe("live fixture scope", () => {
@@ -101,11 +122,14 @@ describe("live fixture scope", () => {
     const runner: CommandRunner = {
       run(command) {
         commands.push([...command]);
+        if (rejectsInvalidFixturePut(command)) {
+          return { exitCode: 1, stderr: "AccessDenied", stdout: "" };
+        }
         return { exitCode: 0, stderr: "", stdout: response(command) };
       },
     };
 
-    expect(runLiveFixtureCheck(config, runner, runId)).toHaveLength(3);
+    expect(runLiveFixtureCheck(config, runner, runId)).toHaveLength(4);
     const deleteCommands = commands.filter(
       (command) => command[2] === "delete-item" || command[2] === "delete-object",
     );
@@ -120,6 +144,68 @@ describe("live fixture scope", () => {
       (command) => command[2] === "delete-item" && command.includes("--condition-expression"),
     );
     expect(markedDelete).toContain("fixture_run_id = :run");
+
+    const checksummedPut = commands.find(
+      (command) =>
+        command[1] === "s3api" &&
+        command[2] === "put-object" &&
+        (command[command.indexOf("--key") + 1] ?? "") === `fixtures/${runId}/ciphertext`,
+    );
+    expect(checksummedPut).toContain("--checksum-algorithm");
+    expect(checksummedPut).toContain("SHA256");
+    expect(checksummedPut).toContain("--checksum-sha256");
+    expect(checksummedPut).toContain(fixtureChecksum);
+
+    const rejectedPuts = commands.filter(rejectsInvalidFixturePut);
+    expect(rejectedPuts).toHaveLength(3);
+  });
+
+  test("rejects a fixture whose HeadObject metadata does not match its signed upload", () => {
+    const runner: CommandRunner = {
+      run(command) {
+        if (rejectsInvalidFixturePut(command)) {
+          return { exitCode: 1, stderr: "AccessDenied", stdout: "" };
+        }
+        if (command[1] === "s3api" && command[2] === "head-object") {
+          return {
+            exitCode: 0,
+            stderr: "",
+            stdout: JSON.stringify({
+              ChecksumSHA256: "unexpected-checksum",
+              ContentLength: Buffer.byteLength(fixturePayload, "utf8"),
+              ServerSideEncryption: "AES256",
+            }),
+          };
+        }
+        return { exitCode: 0, stderr: "", stdout: response(command) };
+      },
+    };
+
+    expect(() => runLiveFixtureCheck(config, runner, runId)).toThrow(
+      "S3 fixture integrity check failed.",
+    );
+  });
+
+  test("fails closed and removes an invalid object if a bucket policy unexpectedly permits it", () => {
+    const commands: string[][] = [];
+    const runner: CommandRunner = {
+      run(command) {
+        commands.push([...command]);
+        return { exitCode: 0, stderr: "", stdout: response(command) };
+      },
+    };
+
+    expect(() => runLiveFixtureCheck(config, runner, runId)).toThrow(
+      "S3 bucket policy accepted missing S3-managed encryption.",
+    );
+    expect(
+      commands.some(
+        (command) =>
+          command[1] === "s3api" &&
+          command[2] === "delete-object" &&
+          (command[command.indexOf("--key") + 1] ?? "").includes("missing-encryption"),
+      ),
+    ).toBe(true);
   });
 
   test("reports failed AWS commands without leaking configuration", () => {

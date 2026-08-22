@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -58,6 +59,12 @@ interface ObjectTaggingResponse {
     readonly Key?: unknown;
     readonly Value?: unknown;
   }>;
+}
+
+interface ObjectHeadResponse {
+  readonly ChecksumSHA256?: unknown;
+  readonly ContentLength?: unknown;
+  readonly ServerSideEncryption?: unknown;
 }
 
 /** Executes commands against the current shell environment. */
@@ -165,6 +172,9 @@ export function runLiveFixtureCheck(
   const sentinelItem = sentinelDynamoItem(scope, "sentinel");
   const temporaryDirectory = mkdtempSync(join(tmpdir(), "cipher-live-fixture-"));
   const payload = join(temporaryDirectory, "ciphertext.bin");
+  const payloadContents = "cipher live fixture\n";
+  const payloadChecksum = sha256Base64(payloadContents);
+  const payloadLength = Buffer.byteLength(payloadContents, "utf8");
   const createdUsers: string[] = [];
   let fixtureItemCreated = false;
   let fixtureObjectCreated = false;
@@ -172,7 +182,7 @@ export function runLiveFixtureCheck(
   let sentinelObjectCreated = false;
 
   try {
-    writeFileSync(payload, "cipher live fixture\n");
+    writeFileSync(payload, payloadContents);
 
     for (const username of [alice, bob]) {
       createFixtureUser(config, runner, scope, username);
@@ -186,10 +196,12 @@ export function runLiveFixtureCheck(
     sentinelItemCreated = true;
     assertDynamoMarker(config, runner, fixtureItem, scope.id);
 
-    putFixtureObject(config, runner, fixtureKey, payload, scope.id);
+    assertInvalidS3WritesAreRejected(config, runner, scope, payload);
+    putFixtureObject(config, runner, fixtureKey, payload, scope.id, payloadChecksum);
     fixtureObjectCreated = true;
     putFixtureObject(config, runner, sentinelKey, payload);
     sentinelObjectCreated = true;
+    assertObjectIntegrity(config, runner, fixtureKey, payloadChecksum, payloadLength);
     assertObjectMarker(config, runner, fixtureKey, scope.id);
 
     deleteMarkedDynamoItem(config, runner, fixtureItem, scope.id);
@@ -201,7 +213,8 @@ export function runLiveFixtureCheck(
 
     return [
       `Created, checked, and removed two Cognito fixtures in ${scope.namespace}.`,
-      `Created and removed only marked DynamoDB and S3 fixtures for ${scope.id}.`,
+      `Created, checksummed, and removed only marked DynamoDB and S3 fixtures for ${scope.id}.`,
+      "Rejected missing or wrong SSE-S3 and out-of-prefix uploads; HeadObject matched checksum, length, and SSE-S3 metadata.",
       "Verified that unmarked same-prefix sentinel resources remained untouched.",
     ];
   } finally {
@@ -493,8 +506,11 @@ function putFixtureObject(
   key: string,
   payload: string,
   marker?: string,
+  checksum?: string,
 ): void {
   const tagging = marker === undefined ? [] : ["--tagging", `fixture-run-id=${marker}`];
+  const checksumArguments =
+    checksum === undefined ? [] : ["--checksum-algorithm", "SHA256", "--checksum-sha256", checksum];
   run(
     aws(
       config,
@@ -508,6 +524,7 @@ function putFixtureObject(
       payload,
       "--server-side-encryption",
       "AES256",
+      ...checksumArguments,
       ...tagging,
     ),
     runner,
@@ -515,12 +532,111 @@ function putFixtureObject(
   );
 }
 
+function assertInvalidS3WritesAreRejected(
+  config: LiveFixtureConfig,
+  runner: CommandRunner,
+  scope: FixtureScope,
+  payload: string,
+): void {
+  assertPutObjectRejected(
+    config,
+    runner,
+    scope.objectKey("missing-encryption"),
+    payload,
+    [],
+    "missing S3-managed encryption",
+  );
+  assertPutObjectRejected(
+    config,
+    runner,
+    scope.objectKey("wrong-encryption"),
+    payload,
+    ["--server-side-encryption", "aws:kms"],
+    "wrong S3-managed encryption",
+  );
+  assertPutObjectRejected(
+    config,
+    runner,
+    `outside-cipher-prefix/${scope.id}/ciphertext`,
+    payload,
+    ["--server-side-encryption", "AES256"],
+    "a key outside Cipher's allowed prefixes",
+  );
+}
+
+function assertPutObjectRejected(
+  config: LiveFixtureConfig,
+  runner: CommandRunner,
+  key: string,
+  payload: string,
+  argumentsForPut: ReadonlyArray<string>,
+  subject: string,
+): void {
+  const command = aws(
+    config,
+    "s3api",
+    "put-object",
+    "--bucket",
+    config.bucket,
+    "--key",
+    key,
+    "--body",
+    payload,
+    ...argumentsForPut,
+  );
+  const result = runner.run(command);
+  if (result.exitCode !== 0) return;
+
+  deleteExactObject(config, runner, key);
+  throw new Error(`S3 bucket policy accepted ${subject}.`);
+}
+
 function assertObjectExists(config: LiveFixtureConfig, runner: CommandRunner, key: string): void {
-  run(
-    aws(config, "s3api", "head-object", "--bucket", config.bucket, "--key", key),
+  readObjectHead(config, runner, key);
+}
+
+function readObjectHead(
+  config: LiveFixtureConfig,
+  runner: CommandRunner,
+  key: string,
+): ObjectHeadResponse {
+  const output = run(
+    aws(
+      config,
+      "s3api",
+      "head-object",
+      "--bucket",
+      config.bucket,
+      "--key",
+      key,
+      "--checksum-mode",
+      "ENABLED",
+    ),
     runner,
     "Read S3 fixture",
   );
+  return parseJson<ObjectHeadResponse>(output, "the S3 fixture metadata");
+}
+
+function assertObjectIntegrity(
+  config: LiveFixtureConfig,
+  runner: CommandRunner,
+  key: string,
+  expectedChecksum: string,
+  expectedLength: number,
+): void {
+  const metadata = readObjectHead(config, runner, key);
+  if (
+    metadata.ServerSideEncryption !== "AES256" ||
+    metadata.ChecksumSHA256 !== expectedChecksum ||
+    metadata.ContentLength !== expectedLength
+  ) {
+    throw new Error("S3 fixture integrity check failed.");
+  }
+}
+
+function sha256Base64(value: string): string {
+  return createHash("sha256").update(value).digest("base64");
 }
 
 function assertObjectMarker(
