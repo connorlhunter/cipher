@@ -246,6 +246,12 @@ describe("Cipher state foundations", () => {
           JSON.stringify({ Bool: { "aws:SecureTransport": "false" } }),
       ),
     );
+    assert.deepEqual(statementBySid(statements, "DenyMissingPayloadChecksum").Condition, {
+      Null: { "s3:x-amz-content-sha256": "true" },
+    });
+    assert.deepEqual(statementBySid(statements, "DenyUnsignedPayload").Condition, {
+      StringEquals: { "s3:x-amz-content-sha256": "UNSIGNED-PAYLOAD" },
+    });
     assert.deepEqual(statementBySid(statements, "DenyMissingS3ManagedEncryption").Condition, {
       Null: { "s3:x-amz-server-side-encryption": "true" },
     });
