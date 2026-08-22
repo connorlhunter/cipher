@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.0-prealpha.7] - 2026-08-21
+
+### Added
+
+- Native desktop trust-boundary foundations: platform credential storage, Rust-owned HTTP and realtime client boundaries, bounded renderer data lifetime, and lifecycle cancellation with safe diagnostics.
+
+### Changed
+
+- Restrict the desktop webview to its fixed navigation, new-window, download, and IPC policies.
+- Synchronize every internal versioned path dependency from the release version.
+
+### Known limits
+
+- Control, Network, and Runtime stacks, authenticated application flows, durable messaging, and live operational drills remain incomplete.
+
 ## [0.1.0-prealpha.5] - 2026-08-21
 
 ### Fixed

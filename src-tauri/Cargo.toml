@@ -16,9 +16,9 @@ custom-protocol = ["tauri/custom-protocol"]
 tauri-build = { version = "^2.6.3", features = [] }
 
 [dependencies]
-cipher-desktop-lifecycle = { path = "../crates/cipher-desktop-lifecycle", version = "^0.1.0-prealpha.6" }
-cipher-types = { path = "../crates/cipher-types", version = "^0.1.0-prealpha.6" }
-cipher-native-transport = { path = "../crates/cipher-native-transport", version = "^0.1.0-prealpha.6" }
+cipher-desktop-lifecycle = { path = "../crates/cipher-desktop-lifecycle", version = "^0.1.0-prealpha.7" }
+cipher-types = { path = "../crates/cipher-types", version = "^0.1.0-prealpha.7" }
+cipher-native-transport = { path = "../crates/cipher-native-transport", version = "^0.1.0-prealpha.7" }
 keyring-core = "^1.0.0"
 serde.workspace = true
 sha2 = "^0.10.9"
