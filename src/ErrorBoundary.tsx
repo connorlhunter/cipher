@@ -28,13 +28,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   /**
-   * Reserves a hook for forwarding redacted native diagnostics.
+   * Intentionally discards render failures instead of serializing props or a
+   * component stack that could contain display text.
    *
    * @param _error - Error raised by a descendant.
    * @param _info - React component stack for the failure.
    */
   public componentDidCatch(_error: Error, _info: ErrorInfo): void {
-    // Native diagnostics will receive a redacted failure event later.
+    // A later diagnostics exporter may use only a fixed, content-free code.
   }
 
   /**
