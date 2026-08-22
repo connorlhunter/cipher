@@ -533,7 +533,7 @@ dependencies = [
 
 [[package]]
 name = "cipher-desktop"
-version = "0.1.0-prealpha.7"
+version = "0.1.0-prealpha.8"
 dependencies = [
  "apple-native-keyring-store",
  "cipher-desktop-lifecycle",
@@ -552,7 +552,7 @@ dependencies = [
 
 [[package]]
 name = "cipher-desktop-lifecycle"
-version = "0.1.0-prealpha.7"
+version = "0.1.0-prealpha.8"
 dependencies = [
  "serde",
  "serde_json",
@@ -560,7 +560,7 @@ dependencies = [
 
 [[package]]
 name = "cipher-native-transport"
-version = "0.1.0-prealpha.7"
+version = "0.1.0-prealpha.8"
 dependencies = [
  "cipher-realtime-protocol",
  "cipher-types",
@@ -574,7 +574,7 @@ dependencies = [
 
 [[package]]
 name = "cipher-realtime-protocol"
-version = "0.1.0-prealpha.7"
+version = "0.1.0-prealpha.8"
 dependencies = [
  "cipher-types",
  "serde",
@@ -583,7 +583,7 @@ dependencies = [
 
 [[package]]
 name = "cipher-server"
-version = "0.1.0-prealpha.7"
+version = "0.1.0-prealpha.8"
 dependencies = [
  "axum",
  "cipher-types",
@@ -599,11 +599,11 @@ dependencies = [
 
 [[package]]
 name = "cipher-test-support"
-version = "0.1.0-prealpha.7"
+version = "0.1.0-prealpha.8"
 
 [[package]]
 name = "cipher-types"
-version = "0.1.0-prealpha.7"
+version = "0.1.0-prealpha.8"
 dependencies = [
  "serde",
  "serde_json",
