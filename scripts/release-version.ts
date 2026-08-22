@@ -6,6 +6,8 @@ const cargoLockPath = "Cargo.lock";
 const tauriConfigPath = "src-tauri/tauri.conf.json";
 const workspaceCrates = [
   "cipher-desktop",
+  "cipher-desktop-lifecycle",
+  "cipher-native-transport",
   "cipher-realtime-protocol",
   "cipher-server",
   "cipher-test-support",
@@ -17,8 +19,28 @@ const versionedPathDependencies = [
     path: "apps/cipher-server/Cargo.toml",
   },
   {
+    matcher: /(cipher-desktop-lifecycle = \{ path = "[^"]+", version = ")\^[^"]+(" \})/u,
+    path: "src-tauri/Cargo.toml",
+  },
+  {
+    matcher: /(cipher-native-transport = \{ path = "[^"]+", version = ")\^[^"]+(" \})/u,
+    path: "src-tauri/Cargo.toml",
+  },
+  {
     matcher: /(cipher-types = \{ path = "[^"]+", version = ")\^[^"]+(" \})/u,
     path: "src-tauri/Cargo.toml",
+  },
+  {
+    matcher: /(cipher-types = \{ path = "[^"]+", version = ")\^[^"]+(" \})/u,
+    path: "crates/cipher-realtime-protocol/Cargo.toml",
+  },
+  {
+    matcher: /(cipher-realtime-protocol = \{ path = "[^"]+", version = ")\^[^"]+(" \})/u,
+    path: "crates/cipher-native-transport/Cargo.toml",
+  },
+  {
+    matcher: /(cipher-types = \{ path = "[^"]+", version = ")\^[^"]+(" \})/u,
+    path: "crates/cipher-native-transport/Cargo.toml",
   },
 ] as const;
 
