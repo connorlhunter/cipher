@@ -6,6 +6,7 @@ import {
   createFixtureScope,
   liveRunner,
   loadLiveFixtureConfig,
+  payloadSigningConfigContents,
   runLiveFixtureCheck,
   type CommandRunner,
 } from "../scripts/live-fixtures";
@@ -117,6 +118,15 @@ describe("live fixture scope", () => {
     expect(() =>
       loadLiveFixtureConfig({ ...fixtureEnvironment, CIPHER_MEDIA_BUCKET: " " }),
     ).toThrow("CIPHER_MEDIA_BUCKET must be a non-empty value");
+  });
+
+  test("writes payload signing at the AWS CLI profile level", () => {
+    expect(payloadSigningConfigContents(undefined, true)).toBe(
+      "[default]\npayload_signing_enabled = true\n",
+    );
+    expect(payloadSigningConfigContents("production", false)).toBe(
+      "[profile production]\npayload_signing_enabled = false\n",
+    );
   });
 
   test("uses exact, marked cleanup and leaves unmarked sentinels outside it", () => {

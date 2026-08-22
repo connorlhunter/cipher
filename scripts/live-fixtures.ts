@@ -254,16 +254,26 @@ interface PayloadSigningConfig {
   readonly unsigned: string;
 }
 
+/**
+ * Renders the AWS CLI profile setting that makes a PutObject body part of its SigV4 signature.
+ *
+ * AWS CLI reads `payload_signing_enabled` from the profile itself rather than its `s3` section.
+ */
+export function payloadSigningConfigContents(
+  profile: string | undefined,
+  enabled: boolean,
+): string {
+  const profileName = profile?.trim() || "default";
+  const section = profileName === "default" ? "[default]" : `[profile ${profileName}]`;
+  return `${section}\npayload_signing_enabled = ${enabled ? "true" : "false"}\n`;
+}
+
 function createPayloadSigningConfig(directory: string): PayloadSigningConfig {
-  const profile = process.env.AWS_PROFILE?.trim() || "default";
-  const section = profile === "default" ? "[default]" : `[profile ${profile}]`;
   const writeConfig = (name: string, enabled: boolean): string => {
     const file = join(directory, name);
-    writeFileSync(
-      file,
-      `${section}\ns3 =\n  payload_signing_enabled = ${enabled ? "true" : "false"}\n`,
-      { mode: 0o600 },
-    );
+    writeFileSync(file, payloadSigningConfigContents(process.env.AWS_PROFILE, enabled), {
+      mode: 0o600,
+    });
     return file;
   };
 
