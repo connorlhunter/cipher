@@ -158,14 +158,9 @@ export function plannedCommands(
       const imageParameter = `${config.stacks.runtime}:ServerImageTag=${imageTag}`;
       return [
         ["bun", "run", "infra:readiness"],
-        cdkCommand(
-          "diff",
-          ...persistentDeployStacks,
-          config.stacks.network,
-          config.stacks.runtime,
-          "--parameters",
-          imageParameter,
-        ),
+        // CDK's diff command does not accept CloudFormation parameter overrides.
+        // The following deploy command supplies the immutable runtime image tag.
+        cdkCommand("diff", ...persistentDeployStacks, config.stacks.network, config.stacks.runtime),
         cdkCommand(
           "deploy",
           ...persistentDeployStacks,

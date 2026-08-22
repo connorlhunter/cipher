@@ -354,8 +354,6 @@ describe("infrastructure controls", () => {
         "CipherProductionControl",
         "CipherProductionNetwork",
         "CipherProductionRuntime",
-        "--parameters",
-        "CipherProductionRuntime:ServerImageTag=release-20260822",
       ],
       [
         "npm",
