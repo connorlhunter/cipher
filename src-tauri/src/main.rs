@@ -1,5 +1,7 @@
 //! Native desktop entry point and commands for Cipher.
 
+pub mod credential_store;
+
 mod ipc;
 mod security;
 
