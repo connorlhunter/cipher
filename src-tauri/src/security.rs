@@ -38,7 +38,7 @@ fn is_application_document(url: &Url) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{MAIN_WINDOW_LABEL, allows_navigation_with_development_server};
+    use super::{MAIN_WINDOW_LABEL, allows_navigation, allows_navigation_with_development_server};
     use tauri::Url;
 
     fn url(value: &str) -> Url {
@@ -74,6 +74,11 @@ mod tests {
             &development_url,
             false
         ));
+    }
+
+    #[test]
+    fn public_navigation_policy_keeps_the_bundled_document_available() {
+        assert!(allows_navigation(&url("tauri://localhost/")));
     }
 
     #[test]
