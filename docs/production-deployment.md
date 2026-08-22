@@ -32,9 +32,13 @@ Run these commands from an interactive terminal authenticated to the configured 
 
    ```sh
    bun --env-file=.env run infra:readiness
-   npm --prefix infra run cdk -- diff \
+   npm --prefix infra exec cdk -- \
+     --app "npm --prefix infra exec tsx -- infra/bin/cipher.ts" \
+     diff \
      "$CIPHER_STATE_STACK" "$CIPHER_CONTROL_STACK"
-   npm --prefix infra run cdk -- deploy \
+   npm --prefix infra exec cdk -- \
+     --app "npm --prefix infra exec tsx -- infra/bin/cipher.ts" \
+     deploy \
      "$CIPHER_STATE_STACK" "$CIPHER_CONTROL_STACK" \
      --require-approval any-change
    ```
