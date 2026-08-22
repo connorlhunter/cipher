@@ -4,6 +4,7 @@ members = [
   "crates/cipher-test-support",
   "crates/cipher-realtime-protocol",
   "crates/cipher-native-transport",
+  "crates/cipher-desktop-lifecycle",
   "crates/cipher-types",
   "src-tauri",
 ]

@@ -410,6 +410,12 @@ version = "0.1.0-prealpha.6"
 dependencies = [
  "cipher-realtime-protocol",
  "cipher-types",
+]
+
+[[package]]
+name = "cipher-desktop-lifecycle"
+version = "0.1.0-prealpha.6"
+dependencies = [
  "serde",
  "serde_json",
 ]
