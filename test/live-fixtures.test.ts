@@ -161,16 +161,21 @@ describe("live fixture scope", () => {
     );
     expect(markedDelete).toContain("fixture_run_id = :run");
 
-    const checksummedPut = commands.find(
+    const checksummedPuts = commands.filter(
       (command) =>
         command[1] === "s3api" &&
         command[2] === "put-object" &&
-        (command[command.indexOf("--key") + 1] ?? "") === `fixtures/${runId}/ciphertext`,
+        [`fixtures/${runId}/ciphertext`, `fixtures/${runId}/sentinel`].includes(
+          command[command.indexOf("--key") + 1] ?? "",
+        ),
     );
-    expect(checksummedPut).toContain("--checksum-algorithm");
-    expect(checksummedPut).toContain("SHA256");
-    expect(checksummedPut).toContain("--checksum-sha256");
-    expect(checksummedPut).toContain(fixtureChecksum);
+    expect(checksummedPuts).toHaveLength(2);
+    for (const checksummedPut of checksummedPuts) {
+      expect(checksummedPut).toContain("--checksum-algorithm");
+      expect(checksummedPut).toContain("SHA256");
+      expect(checksummedPut).toContain("--checksum-sha256");
+      expect(checksummedPut).toContain(fixtureChecksum);
+    }
 
     const rejectedPuts = commands.filter(rejectsInvalidFixturePut);
     expect(rejectedPuts).toHaveLength(5);

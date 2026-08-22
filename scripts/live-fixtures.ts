@@ -211,8 +211,9 @@ export function runLiveFixtureCheck(
       putFixtureObject(config, runner, fixtureKey, payload, scope.id, payloadChecksum),
     );
     fixtureObjectCreated = true;
+    // A matching checksum keeps the sentinel upload on the same signed-body path.
     withAwsConfig(payloadSigning?.signed, () =>
-      putFixtureObject(config, runner, sentinelKey, payload),
+      putFixtureObject(config, runner, sentinelKey, payload, undefined, payloadChecksum),
     );
     sentinelObjectCreated = true;
     withAwsConfig(payloadSigning?.signed, () => {
