@@ -25,6 +25,7 @@
     "scripts/toolchains.ts",
     "src/desktop-contract.ts",
     "src/desktop.ts",
+    "src/renderer-data-lifetime.ts",
     "test/**/*.test.ts",
     "test/**/*.test.tsx"
   ]
