@@ -28,10 +28,13 @@ desktop extensions. Shutdown begins on an exit request and records completion
 only when the event loop exits. A resumed event never restores a locked session
 or reconnects a transport without an explicit safe online transition.
 
-Native authentication, messaging, reachability, and power-management code must
-call `DesktopLifecycleService::handle_native_event` for lock, logout, account
-change, device revocation, sleep, wake, offline, online, and interrupted work.
-The webview has no command for these transitions.
+Native authentication and messaging code must begin a `NativeOperation` through
+`DesktopLifecycleService` and pass only its shared cancellation handle into
+native HTTP or realtime work. Lock, logout, account change, device revocation,
+sleep, and shutdown cancel every retained handle before renderer cleanup. Native
+reachability and power-management code must call
+`DesktopLifecycleService::handle_native_event` for the matching safety event.
+The webview has no command for these transitions or operation handles.
 
 ## Diagnostics
 

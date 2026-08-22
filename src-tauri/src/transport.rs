@@ -98,7 +98,10 @@ fn map_credential_error(error: CredentialStoreError) -> NativeTransportError {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::{
+        panic::catch_unwind,
+        sync::{Arc, Mutex},
+    };
 
     use cipher_native_transport::{
         AccessToken, NativeTransportError, NativeTransportErrorCode, OperationCancellation,
@@ -280,5 +283,20 @@ mod tests {
                 .code(),
             NativeTransportErrorCode::Cancelled
         );
+    }
+
+    #[test]
+    fn authentication_store_test_double_rejects_every_mutation() {
+        let store = FixedStore {
+            result: Ok(Some(REFRESH_MATERIAL.to_vec())),
+        };
+        let scope = CredentialScope::new("transport-test-account").unwrap();
+        let entry = scope.entry(CredentialKind::RefreshMaterial);
+        let secret = SecretBytes::new(REFRESH_MATERIAL.to_vec());
+
+        assert!(catch_unwind(|| store.replace(&entry, &secret)).is_err());
+        assert!(catch_unwind(|| store.migrate(&entry)).is_err());
+        assert!(catch_unwind(|| store.delete(&entry)).is_err());
+        assert!(catch_unwind(|| store.delete_scope(&scope)).is_err());
     }
 }
