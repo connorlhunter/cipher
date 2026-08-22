@@ -178,7 +178,7 @@ describe("Cipher production control and runtime", () => {
       StringEquals: {
         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
         "token.actions.githubusercontent.com:sub":
-          "repo:connorlhunter/cipher:environment:production",
+          "repo:connorlhunter@59103082/cipher@1333508685:environment:production",
       },
     });
     assert.equal(properties(deploymentRole).MaxSessionDuration, 3600);

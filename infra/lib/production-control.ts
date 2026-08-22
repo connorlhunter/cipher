@@ -17,7 +17,9 @@ const productionExecutionRoleName = "cipher-production-execution";
 const productionTaskRoleName = "cipher-production-task";
 const productionBackupRoleName = "cipher-production-AWSBackup";
 const githubOidcProviderUrl = "https://token.actions.githubusercontent.com";
-const githubDeploymentSubject = "repo:connorlhunter/cipher:environment:production";
+// GitHub's immutable subject format binds this trust to Cipher's stable owner and repository IDs.
+const githubDeploymentSubject =
+  "repo:connorlhunter@59103082/cipher@1333508685:environment:production";
 const cdkBootstrapQualifier = "hnb659fds";
 const cdkBootstrapStackName = "CDKToolkit";
 const productionLogGroupName = "/cipher/production/server";
