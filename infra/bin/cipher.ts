@@ -1,7 +1,10 @@
 /** Defines Cipher's four production CloudFormation stack boundaries. */
 import * as cdk from "aws-cdk-lib";
 import { loadInfrastructureConfig } from "../../config/environment.js";
-import { addProductionNetwork } from "../lib/production-network.js";
+import {
+  addProductionNetwork,
+  configureProductionNetworkContext,
+} from "../lib/production-network.js";
 import { addStateFoundations } from "../lib/state-foundations.js";
 
 const config = loadInfrastructureConfig(process.env);
@@ -14,6 +17,7 @@ if (account === undefined || account.length === 0) {
 
 const app = new cdk.App();
 const environment = { account, region };
+configureProductionNetworkContext(app, account, region);
 const allowPersistentDestruction =
   app.node.tryGetContext("cipher:allow-persistent-destruction") === "true";
 

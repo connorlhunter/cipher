@@ -8,7 +8,9 @@ and is consumed by the later production runtime stack.
 ## Shape
 
 - One IPv4 VPC named `cipher-production-network` (`10.72.0.0/16`).
-- Two `/24` public subnets, one in each selected `us-east-1` availability zone.
+- Two `/24` public subnets in `us-east-1a` and `us-east-1b`. The fixed
+  production names keep CDK synthesis AWS-free in local checks and continuous
+  integration.
 - One internet gateway and one default route per public subnet.
 - No private or isolated subnets, NAT gateways, Elastic IP addresses, or VPC
   endpoints. The closed alpha deliberately avoids the recurring NAT cost.

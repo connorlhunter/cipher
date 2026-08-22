@@ -4,7 +4,12 @@ import { describe, test } from "node:test";
 import * as cdk from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
 
-import { addProductionNetwork, productionNetworkTags } from "../lib/production-network.js";
+import {
+  addProductionNetwork,
+  configureProductionNetworkContext,
+  productionNetworkAvailabilityZones,
+  productionNetworkTags,
+} from "../lib/production-network.js";
 
 interface CloudFormationResource {
   readonly Properties?: Record<string, unknown>;
@@ -12,6 +17,7 @@ interface CloudFormationResource {
 
 function networkTemplate(): Template {
   const app = new cdk.App();
+  configureProductionNetworkContext(app, "123456789012", "us-east-1");
   const stack = new cdk.Stack(app, "Network", {
     env: { account: "123456789012", region: "us-east-1" },
   });
@@ -63,6 +69,16 @@ function outputs(template: Template): Record<string, unknown> {
 }
 
 describe("Cipher production network", () => {
+  test("preloads the fixed production zones before VPC construction", () => {
+    const app = new cdk.App();
+    configureProductionNetworkContext(app, "123456789012", "us-east-1");
+
+    assert.deepEqual(
+      app.node.tryGetContext("availability-zones:account=123456789012:region=us-east-1"),
+      productionNetworkAvailabilityZones,
+    );
+  });
+
   test("creates one tagged two-AZ public VPC with no NAT or endpoint cost", () => {
     const template = networkTemplate();
     const vpc = onlyResource(template, "AWS::EC2::VPC");
@@ -81,6 +97,9 @@ describe("Cipher production network", () => {
     assert.deepEqual(subnets.map((subnet) => properties(subnet).CidrBlock).sort(), [
       "10.72.0.0/24",
       "10.72.1.0/24",
+    ]);
+    assert.deepEqual(subnets.map((subnet) => properties(subnet).AvailabilityZone).sort(), [
+      ...productionNetworkAvailabilityZones,
     ]);
     for (const subnet of subnets) {
       assert.equal(properties(subnet).MapPublicIpOnLaunch, true);
