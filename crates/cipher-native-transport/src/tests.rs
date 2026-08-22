@@ -373,6 +373,7 @@ fn native_origins_require_secure_origins_except_explicit_loopback() {
     assert!(NativeRealtimeOrigin::parse("wss://api.example.test").is_ok());
     assert!(NativeHttpOrigin::parse("http://localhost:8080").is_ok());
     assert!(NativeRealtimeOrigin::parse("ws://[::1]:8080").is_ok());
+    assert!(NativeHttpOrigin::parse("http://LOCALHOST:8080").is_ok());
 
     for origin in [
         "",
@@ -384,6 +385,13 @@ fn native_origins_require_secure_origins_except_explicit_loopback() {
         "https://api.example.test?capability=secret",
         "https://api.example.test\n",
         "https://",
+        "https://:443",
+        "https://api.example.test:invalid",
+        "https://api.example.test:0",
+        "https://api..example.test",
+        "https://-api.example.test",
+        "https://[::1]unexpected",
+        "http://[::2]:8080",
     ] {
         assert!(NativeHttpOrigin::parse(origin).is_err());
     }

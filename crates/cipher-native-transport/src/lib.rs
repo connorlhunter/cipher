@@ -7,6 +7,7 @@
 
 use std::{
     fmt,
+    net::{Ipv4Addr, Ipv6Addr},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -258,11 +259,8 @@ fn parse_origin(
         ));
     }
 
-    let host = remainder
-        .strip_prefix('[')
-        .and_then(|host| host.split(']').next())
-        .unwrap_or_else(|| remainder.split(':').next().unwrap_or_default());
-    let is_loopback = matches!(host, "localhost" | "127.0.0.1" | "::1");
+    let host = parse_origin_authority(remainder)?;
+    let is_loopback = host.is_loopback;
     if scheme != secure_scheme && !(scheme == loopback_scheme && is_loopback) {
         return Err(NativeTransportError::new(
             NativeTransportErrorCode::InvalidRequest,
@@ -270,6 +268,71 @@ fn parse_origin(
     }
 
     Ok(format!("{scheme}://{remainder}"))
+}
+
+struct NativeOriginHost {
+    is_loopback: bool,
+}
+
+fn parse_origin_authority(value: &str) -> Result<NativeOriginHost, NativeTransportError> {
+    let invalid = || NativeTransportError::new(NativeTransportErrorCode::InvalidRequest);
+    let (host, port) = if let Some(remainder) = value.strip_prefix('[') {
+        let (host, port) = remainder.split_once(']').ok_or_else(invalid)?;
+        let port = match port {
+            "" => None,
+            port if port.starts_with(':') => Some(&port[1..]),
+            _ => return Err(invalid()),
+        };
+        let address = host.parse::<Ipv6Addr>().map_err(|_| invalid())?;
+        (
+            NativeOriginHost {
+                is_loopback: address.is_loopback(),
+            },
+            port,
+        )
+    } else {
+        let (host, port) = match value.split_once(':') {
+            Some((host, port)) if !port.contains(':') => (host, Some(port)),
+            Some(_) => return Err(invalid()),
+            None => (value, None),
+        };
+        if !is_valid_dns_or_ipv4_host(host) {
+            return Err(invalid());
+        }
+        let is_loopback = host.eq_ignore_ascii_case("localhost")
+            || host
+                .parse::<Ipv4Addr>()
+                .is_ok_and(|address| address.is_loopback());
+        (NativeOriginHost { is_loopback }, port)
+    };
+
+    if let Some(port) = port {
+        let port = port.parse::<u16>().map_err(|_| invalid())?;
+        if port == 0 {
+            return Err(invalid());
+        }
+    }
+
+    Ok(host)
+}
+
+fn is_valid_dns_or_ipv4_host(value: &str) -> bool {
+    if value.is_empty() || value.len() > 253 {
+        return false;
+    }
+    if value.parse::<Ipv4Addr>().is_ok() {
+        return true;
+    }
+
+    value.split('.').all(|label| {
+        !label.is_empty()
+            && label.len() <= 63
+            && !label.starts_with('-')
+            && !label.ends_with('-')
+            && label
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    })
 }
 
 /// A bounded relative v1 API path sent by native HTTP code.
