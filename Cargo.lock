@@ -392,6 +392,7 @@ name = "cipher-desktop"
 version = "0.1.0-prealpha.6"
 dependencies = [
  "apple-native-keyring-store",
+ "cipher-native-transport",
  "cipher-types",
  "keyring-core",
  "serde",
