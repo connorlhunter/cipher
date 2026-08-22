@@ -14,3 +14,9 @@ cipher-realtime-protocol = { path = "../cipher-realtime-protocol", version = "^0
 cipher-types = { path = "../cipher-types", version = "^0.1.0-prealpha.7" }
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+native-tls = "^0.2.14"
+tokio = { workspace = true, features = ["io-util", "time"] }
+tokio-native-tls = "^0.3.1"
+tokio-tungstenite = { version = "^0.29.0", default-features = false, features = ["connect", "native-tls"] }
