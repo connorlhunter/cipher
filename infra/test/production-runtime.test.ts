@@ -24,7 +24,15 @@ const runtimeSettings = {
   certificateArn: `arn:aws:acm:${region}:${account}:certificate/00000000-0000-4000-8000-000000000000`,
   hostedZoneId: "Z000000000000000000000",
 };
-const controlSettings = { budgetAlertEmail: "production-alerts@example.invalid" };
+const controlSettings = {
+  budgetAlertEmail: "production-alerts@example.invalid",
+  stackNames: {
+    control: "Control",
+    network: "Network",
+    runtime: "Runtime",
+    state: "State",
+  },
+};
 
 function templates(
   runtimeSecretArn?: string,
@@ -207,7 +215,17 @@ describe("Cipher production control and runtime", () => {
     assert.equal((properties(budget).NotificationsWithSubscribers as unknown[]).length, 2);
     assert.doesNotMatch(deploymentDocument, /AdministratorAccess/u);
     assert.doesNotMatch(deploymentDocument, /:iam:us-east-1:/u);
+    assert.match(deploymentDocument, /cloudformation:DescribeStacks/u);
+    for (const stack of ["CDKToolkit", "State", "Control", "Network", "Runtime"]) {
+      assert.match(deploymentDocument, new RegExp(`stack/${stack}/\\*`, "u"));
+    }
+    assert.match(deploymentDocument, /ecs:DescribeServices/u);
+    assert.match(deploymentDocument, /service\/cipher-production\/cipher-production-server/u);
     assert.match(deploymentDocument, /backup:StartBackupJob/u);
+    assert.match(
+      deploymentDocument,
+      /"Action":"backup:StartBackupJob","Effect":"Allow","Resource":"\*"/u,
+    );
     assert.match(deploymentDocument, /\/fixtures\/\*/u);
     for (const output of [
       "ServerRepositoryName",
