@@ -60,9 +60,10 @@ the service port only from that boundary. See
 deletion model, and change-control procedure.
 
 Run `bun --env-file=.env run infra:readiness` before a production change.
-`infra:resume` checks the configured account and requires an interactive,
-explicit CDK approval for every change; do not apply network changes through
-the AWS console.
+`infra:resume` checks the configured account, reruns that preflight, requires
+the exact retained immutable image tag, and requires an interactive, explicit
+CDK approval for every change; do not apply network changes through the AWS
+console.
 
 ## Production runtime
 

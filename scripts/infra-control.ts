@@ -1,5 +1,7 @@
 import { type InfrastructureConfig, loadInfrastructureConfig } from "../config/environment";
 
+const productionBackupVaultName = "cipher-production-recovery";
+
 /**
  * Infrastructure lifecycle actions supported by the production control script.
  */
@@ -40,6 +42,7 @@ interface ParsedArguments {
   confirmation?: string;
   destroyConfirmation?: string;
   dryRun: boolean;
+  imageTag?: string;
 }
 
 /**
@@ -80,6 +83,7 @@ export function parseArguments(args: string[]): ParsedArguments {
   let confirmation: string | undefined;
   let destroyConfirmation: string | undefined;
   let dryRun = false;
+  let imageTag: string | undefined;
   for (const flag of flags) {
     if (flag === "--dry-run") {
       dryRun = true;
@@ -93,18 +97,32 @@ export function parseArguments(args: string[]): ParsedArguments {
       destroyConfirmation = flag.slice("--destroy-confirm=".length);
       continue;
     }
+    if (flag.startsWith("--image-tag=")) {
+      imageTag = flag.slice("--image-tag=".length);
+      continue;
+    }
     throw new Error(`Unknown infrastructure control option: ${flag}`);
   }
 
-  return { action, confirmation, destroyConfirmation, dryRun };
+  if (imageTag !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(imageTag)) {
+    throw new Error("--image-tag must be one immutable ECR tag value.");
+  }
+  if (action === "resume" && imageTag === undefined) {
+    throw new Error("Resume requires --image-tag=<immutable-server-image-tag>.");
+  }
+  if (action !== "resume" && imageTag !== undefined) {
+    throw new Error("--image-tag is supported only for resume.");
+  }
+
+  return { action, confirmation, destroyConfirmation, dryRun, imageTag };
 }
 
 /**
- * @param args - CDK arguments to append after the package-local executable separator.
- * @returns A command that runs the infrastructure package's CDK executable.
+ * @param args - CDK arguments to append after the infrastructure package script separator.
+ * @returns A command that runs the infrastructure package's CDK script.
  */
 function cdkCommand(...args: string[]): string[] {
-  return ["npm", "--prefix", "infra", "exec", "cdk", "--", ...args];
+  return ["npm", "--prefix", "infra", "run", "cdk", "--", ...args];
 }
 
 /**
@@ -115,43 +133,53 @@ function cdkCommand(...args: string[]): string[] {
 export function plannedCommands(
   action: InfrastructureAction,
   config: InfrastructureConfig,
+  imageTag?: string,
 ): string[][] {
-  const persistentStacks = [config.stacks.state, config.stacks.control];
+  const persistentDeployStacks = [config.stacks.state, config.stacks.control];
+  const persistentDestroyStacks = [config.stacks.control, config.stacks.state];
   const disposableStacks = [config.stacks.runtime, config.stacks.network];
   switch (action) {
     case "pause":
       return disposableStacks.map((stack) => cdkCommand("destroy", stack, "--force"));
-    case "resume":
+    case "resume": {
+      if (imageTag === undefined) {
+        throw new Error("Resume requires --image-tag=<immutable-server-image-tag>.");
+      }
+      const imageParameter = `${config.stacks.runtime}:ServerImageTag=${imageTag}`;
       return [
+        ["bun", "run", "infra:readiness"],
         cdkCommand(
           "diff",
-          config.stacks.state,
-          config.stacks.control,
+          ...persistentDeployStacks,
           config.stacks.network,
           config.stacks.runtime,
+          "--parameters",
+          imageParameter,
         ),
         cdkCommand(
           "deploy",
-          config.stacks.state,
-          config.stacks.control,
+          ...persistentDeployStacks,
           config.stacks.network,
           config.stacks.runtime,
+          "--parameters",
+          imageParameter,
           "--require-approval",
           "any-change",
         ),
       ];
+    }
     case "destroy-all":
       return [
         cdkCommand(
           "deploy",
-          ...persistentStacks,
+          ...persistentDeployStacks,
           "--context",
           "cipher:allow-persistent-destruction=true",
           "--require-approval",
           "any-change",
         ),
         ...disposableStacks.map((stack) => cdkCommand("destroy", stack, "--force")),
-        ...persistentStacks.map((stack) => cdkCommand("destroy", stack, "--force")),
+        ...persistentDestroyStacks.map((stack) => cdkCommand("destroy", stack, "--force")),
       ];
   }
 }
@@ -271,8 +299,10 @@ function existingCommands(
   action: InfrastructureAction,
   runner: CommandRunner,
   config: InfrastructureConfig,
+  imageTag?: string,
 ): string[][] {
-  const persistentStacks = [config.stacks.state, config.stacks.control];
+  const persistentDeployStacks = [config.stacks.state, config.stacks.control];
+  const persistentDestroyStacks = [config.stacks.control, config.stacks.state];
   const disposableStacks = [config.stacks.runtime, config.stacks.network];
   switch (action) {
     case "pause":
@@ -280,11 +310,12 @@ function existingCommands(
         .filter((stack) => stackExists(stack, runner, config))
         .map((stack) => cdkCommand("destroy", stack, "--force"));
     case "resume":
-      return plannedCommands(action, config);
+      return plannedCommands(action, config, imageTag);
     case "destroy-all": {
-      const existingPersistentStacks = persistentStacks.filter((stack) =>
+      const existingPersistentStacks = persistentDeployStacks.filter((stack) =>
         stackExists(stack, runner, config),
       );
+      const existingPersistentStackSet = new Set(existingPersistentStacks);
       const existingDisposableStacks = disposableStacks.filter((stack) =>
         stackExists(stack, runner, config),
       );
@@ -305,7 +336,9 @@ function existingCommands(
               ),
             ]),
         ...existingDisposableStacks.map((stack) => cdkCommand("destroy", stack, "--force")),
-        ...existingPersistentStacks.map((stack) => cdkCommand("destroy", stack, "--force")),
+        ...persistentDestroyStacks
+          .filter((stack) => existingPersistentStackSet.has(stack))
+          .map((stack) => cdkCommand("destroy", stack, "--force")),
       ];
     }
   }
@@ -324,6 +357,104 @@ function runCommand(command: string[], runner: CommandRunner): void {
 }
 
 /**
+ * @param recoveryPointArn - AWS Backup recovery point returned by the exact production vault.
+ * @param expectedAccount - Expected production AWS account identifier.
+ * @returns Whether the recovery point is scoped to the verified production account.
+ */
+function isProductionRecoveryPointArn(recoveryPointArn: string, expectedAccount: string): boolean {
+  return new RegExp(`^arn:[^:\\s]+:[^:\\s]+:[^:\\s]*:${expectedAccount}:[^\\s]+$`, "u").test(
+    recoveryPointArn,
+  );
+}
+
+/**
+ * Removes only recovery points currently returned by Cipher's exact production vault.
+ *
+ * The vault itself cannot be removed while recovery points remain. This runs only after
+ * State and Control have been switched to destructive mode and both confirmations have
+ * already been accepted.
+ *
+ * @param runner - Command runner used for AWS CLI operations.
+ * @param config - Validated production deployment configuration.
+ * @param expectedAccount - Verified production AWS account identifier.
+ * @returns Number of recovery points removed from the exact vault.
+ */
+function deleteProductionRecoveryPoints(
+  runner: CommandRunner,
+  config: InfrastructureConfig,
+  expectedAccount: string,
+): number {
+  const listResult = runner.run([
+    "aws",
+    "backup",
+    "list-recovery-points-by-backup-vault",
+    "--backup-vault-name",
+    productionBackupVaultName,
+    "--region",
+    config.awsRegion,
+    "--output",
+    "json",
+  ]);
+  if (listResult.exitCode !== 0) {
+    throw new Error("Could not list recovery points in Cipher's production backup vault.");
+  }
+
+  let parsed: { RecoveryPoints?: unknown };
+  try {
+    parsed = JSON.parse(listResult.stdout) as { RecoveryPoints?: unknown };
+  } catch {
+    throw new Error("Could not read recovery points in Cipher's production backup vault.");
+  }
+  if (parsed.RecoveryPoints === undefined) {
+    return 0;
+  }
+  if (!Array.isArray(parsed.RecoveryPoints)) {
+    throw new Error("Cipher's production backup vault returned an invalid recovery-point list.");
+  }
+
+  const recoveryPointArns = parsed.RecoveryPoints.map((recoveryPoint) => {
+    if (typeof recoveryPoint !== "object" || recoveryPoint === null) {
+      throw new Error("Cipher's production backup vault returned an invalid recovery point.");
+    }
+    const recoveryPointArn = (recoveryPoint as { RecoveryPointArn?: unknown }).RecoveryPointArn;
+    if (
+      typeof recoveryPointArn !== "string" ||
+      !isProductionRecoveryPointArn(recoveryPointArn, expectedAccount)
+    ) {
+      throw new Error("Cipher's production backup vault returned an out-of-scope recovery point.");
+    }
+    return recoveryPointArn;
+  });
+
+  for (const recoveryPointArn of recoveryPointArns) {
+    const deleteResult = runner.run([
+      "aws",
+      "backup",
+      "delete-recovery-point",
+      "--backup-vault-name",
+      productionBackupVaultName,
+      "--recovery-point-arn",
+      recoveryPointArn,
+      "--region",
+      config.awsRegion,
+    ]);
+    if (deleteResult.exitCode !== 0) {
+      throw new Error("Could not delete a recovery point from Cipher's production backup vault.");
+    }
+  }
+
+  return recoveryPointArns.length;
+}
+
+/**
+ * @param command - Planned infrastructure command.
+ * @returns Whether the command switches State and Control into destructive mode.
+ */
+function isDestructivePreparation(command: string[]): boolean {
+  return command.includes("cipher:allow-persistent-destruction=true");
+}
+
+/**
  * Validates safety confirmations and applies one production infrastructure action.
  *
  * @param args - Command-line arguments describing the action and confirmations.
@@ -338,7 +469,7 @@ export function runInfrastructureControl(
   runner: CommandRunner,
   config: InfrastructureConfig,
 ): string[] {
-  const { action, confirmation, destroyConfirmation, dryRun } = parseArguments(args);
+  const { action, confirmation, destroyConfirmation, dryRun, imageTag } = parseArguments(args);
   const expectedAccount = accountId(environment);
   const expectedConfirmation = confirmationFor(action, expectedAccount, config);
   if (confirmation !== expectedConfirmation) {
@@ -354,16 +485,26 @@ export function runInfrastructureControl(
   }
 
   if (dryRun) {
-    return plannedCommands(action, config).map((command) => command.join(" "));
+    return plannedCommands(action, config, imageTag).map((command) => command.join(" "));
   }
 
-  assertProductionTarget(environment, runner, config);
-  const commands = existingCommands(action, runner, config);
+  const verifiedAccount = assertProductionTarget(environment, runner, config);
+  const commands = existingCommands(action, runner, config, imageTag);
+  const completed: string[] = [];
   for (const command of commands) {
     runCommand(command, runner);
+    completed.push(command.join(" "));
+    if (action === "destroy-all" && isDestructivePreparation(command)) {
+      if (command.includes(config.stacks.control)) {
+        const recoveryPointCount = deleteProductionRecoveryPoints(runner, config, verifiedAccount);
+        completed.push(
+          `Deleted ${recoveryPointCount} recovery point(s) from ${productionBackupVaultName}.`,
+        );
+      }
+    }
   }
 
-  return commands.map((command) => command.join(" "));
+  return completed;
 }
 
 /**
@@ -377,7 +518,7 @@ function completionNote(action: InfrastructureAction): string {
     case "resume":
       return "The protected state and control stacks were kept in place while the network and runtime were restored.";
     case "destroy-all":
-      return "AWS-managed retention can still apply after deletion. Check the destruction receipt before closing the account.";
+      return "The named stacks were destroyed after protected resources entered destructive mode. AWS provider-managed recovery can remain for a limited period; check the destruction receipt before closing the account.";
   }
 }
 

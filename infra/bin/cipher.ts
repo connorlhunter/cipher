@@ -28,7 +28,9 @@ const state = new cdk.Stack(app, config.stacks.state, {
   env: environment,
   terminationProtection: !allowPersistentDestruction,
 });
-const stateFoundations = addStateFoundations(state);
+const stateFoundations = addStateFoundations(state, {
+  allowDestruction: allowPersistentDestruction,
+});
 
 const control = new cdk.Stack(app, config.stacks.control, {
   description: "Cipher production image, deployment identity, and retained operations data.",
@@ -36,6 +38,7 @@ const control = new cdk.Stack(app, config.stacks.control, {
   terminationProtection: !allowPersistentDestruction,
 });
 const productionControl = addProductionControl(control, stateFoundations, {
+  allowDestruction: allowPersistentDestruction,
   budgetAlertEmail: config.budgetAlertEmail,
 });
 

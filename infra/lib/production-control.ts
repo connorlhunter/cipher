@@ -43,6 +43,8 @@ export interface ProductionControl {
 export interface ProductionControlSettings {
   /** Address that receives the production cost budget notifications. */
   readonly budgetAlertEmail: string;
+  /** Enables removal only while the fully confirmed teardown flow is running. */
+  readonly allowDestruction?: boolean;
 }
 
 /**
@@ -62,8 +64,11 @@ export function addProductionControl(
   settings: ProductionControlSettings,
 ): ProductionControl {
   addProductionTags(stack);
+  const allowDestruction = settings.allowDestruction === true;
+  const removalPolicy = allowDestruction ? cdk.RemovalPolicy.DESTROY : cdk.RemovalPolicy.RETAIN;
 
   const serverRepository = new ecr.Repository(stack, "ServerRepository", {
+    emptyOnDelete: allowDestruction,
     imageScanOnPush: true,
     imageTagMutability: ecr.TagMutability.IMMUTABLE,
     lifecycleRules: [
@@ -73,12 +78,12 @@ export function addProductionControl(
         tagStatus: ecr.TagStatus.ANY,
       },
     ],
-    removalPolicy: cdk.RemovalPolicy.RETAIN,
+    removalPolicy,
     repositoryName: productionRepositoryName,
   });
   const serverLogGroup = new logs.LogGroup(stack, "ServerLogGroup", {
     logGroupName: productionLogGroupName,
-    removalPolicy: cdk.RemovalPolicy.RETAIN,
+    removalPolicy,
     retention: logs.RetentionDays.ONE_MONTH,
   });
   const githubOidcProvider = new iam.OidcProviderNative(stack, "GitHubOidcProvider", {
@@ -118,7 +123,7 @@ export function addProductionControl(
   });
   const backupVault = new backup.BackupVault(stack, "BackupVault", {
     backupVaultName: productionBackupVaultName,
-    removalPolicy: cdk.RemovalPolicy.RETAIN,
+    removalPolicy,
   });
   const backupPlan = backup.BackupPlan.daily35DayRetention(stack, "BackupPlan", backupVault);
   backupPlan.addSelection("PersistentTables", {

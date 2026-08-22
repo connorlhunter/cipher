@@ -28,12 +28,17 @@ function confirmation(action: "pause" | "resume" | "destroy-all"): string {
   return `${verb}-CIPHER-PRODUCTION-${expectedAccount}-us-east-1`;
 }
 
-function createRunner(options?: { account?: string; existingStacks?: string[] }): {
+function createRunner(options?: {
+  account?: string;
+  existingStacks?: string[];
+  recoveryPoints?: string[];
+}): {
   calls: string[][];
   runner: CommandRunner;
 } {
   const account = options?.account ?? expectedAccount;
   const existingStacks = new Set(options?.existingStacks ?? []);
+  const recoveryPoints = options?.recoveryPoints ?? [];
   const calls: string[][] = [];
   return {
     calls,
@@ -54,6 +59,18 @@ function createRunner(options?: { account?: string; existingStacks?: string[] })
             stdout: "",
           };
         }
+        if (command[0] === "aws" && command[1] === "backup") {
+          if (command[2] === "list-recovery-points-by-backup-vault") {
+            return {
+              exitCode: 0,
+              stderr: "",
+              stdout: JSON.stringify({
+                RecoveryPoints: recoveryPoints.map((RecoveryPointArn) => ({ RecoveryPointArn })),
+              }),
+            };
+          }
+          return { exitCode: 0, stderr: "", stdout: "" };
+        }
         return { exitCode: 0, stderr: "", stdout: "" };
       },
     },
@@ -67,6 +84,13 @@ describe("infrastructure controls", () => {
     expect(() => parseArguments([])).toThrow("Choose one action");
     expect(() => parseArguments(["pause", "--unsafe"])).toThrow(
       "Unknown infrastructure control option",
+    );
+    expect(() => parseArguments(["resume"])).toThrow("Resume requires --image-tag");
+    expect(() => parseArguments(["resume", "--image-tag=unsafe/tag"])).toThrow(
+      "--image-tag must be one immutable ECR tag value",
+    );
+    expect(() => parseArguments(["pause", "--image-tag=release-20260822"])).toThrow(
+      "--image-tag is supported only for resume",
     );
   });
 
@@ -82,8 +106,8 @@ describe("infrastructure controls", () => {
 
     expect(calls).toEqual([]);
     expect(commands).toEqual([
-      "npm --prefix infra exec cdk -- destroy CipherProductionRuntime --force",
-      "npm --prefix infra exec cdk -- destroy CipherProductionNetwork --force",
+      "npm --prefix infra run cdk -- destroy CipherProductionRuntime --force",
+      "npm --prefix infra run cdk -- destroy CipherProductionNetwork --force",
     ]);
   });
 
@@ -105,7 +129,7 @@ describe("infrastructure controls", () => {
 
     expect(() =>
       runInfrastructureControl(
-        ["resume", `--confirm=${confirmation("resume")}`],
+        ["resume", `--confirm=${confirmation("resume")}`, "--image-tag=release-20260822"],
         { accountId: expectedAccount, isInteractive: false },
         runner,
         config,
@@ -120,7 +144,7 @@ describe("infrastructure controls", () => {
 
     expect(() =>
       runInfrastructureControl(
-        ["resume", `--confirm=${confirmation("resume")}`],
+        ["resume", `--confirm=${confirmation("resume")}`, "--image-tag=release-20260822"],
         interactiveEnvironment,
         runner,
         config,
@@ -173,7 +197,7 @@ describe("infrastructure controls", () => {
         "npm",
         "--prefix",
         "infra",
-        "exec",
+        "run",
         "cdk",
         "--",
         "deploy",
@@ -188,7 +212,7 @@ describe("infrastructure controls", () => {
         "npm",
         "--prefix",
         "infra",
-        "exec",
+        "run",
         "cdk",
         "--",
         "destroy",
@@ -199,7 +223,7 @@ describe("infrastructure controls", () => {
         "npm",
         "--prefix",
         "infra",
-        "exec",
+        "run",
         "cdk",
         "--",
         "destroy",
@@ -210,25 +234,92 @@ describe("infrastructure controls", () => {
         "npm",
         "--prefix",
         "infra",
-        "exec",
-        "cdk",
-        "--",
-        "destroy",
-        "CipherProductionState",
-        "--force",
-      ],
-      [
-        "npm",
-        "--prefix",
-        "infra",
-        "exec",
+        "run",
         "cdk",
         "--",
         "destroy",
         "CipherProductionControl",
         "--force",
       ],
+      [
+        "npm",
+        "--prefix",
+        "infra",
+        "run",
+        "cdk",
+        "--",
+        "destroy",
+        "CipherProductionState",
+        "--force",
+      ],
     ]);
+    expect(calls).toContainEqual([
+      "aws",
+      "backup",
+      "list-recovery-points-by-backup-vault",
+      "--backup-vault-name",
+      "cipher-production-recovery",
+      "--region",
+      "us-east-1",
+      "--output",
+      "json",
+    ]);
+  });
+
+  test("clears only the exact production backup vault before control is destroyed", () => {
+    const recoveryPointArn =
+      "arn:aws:dynamodb:us-east-1:123456789012:table/cipher-production-users/backup/01771900000000-abcdef";
+    const { calls, runner } = createRunner({
+      existingStacks: ["CipherProductionControl"],
+      recoveryPoints: [recoveryPointArn],
+    });
+
+    const completed = runInfrastructureControl(
+      [
+        "destroy-all",
+        `--confirm=${confirmation("destroy-all")}`,
+        `--destroy-confirm=DESTROY-CIPHER-PRODUCTION-AND-ALL-DATA-${expectedAccount}-us-east-1`,
+      ],
+      interactiveEnvironment,
+      runner,
+      config,
+    );
+
+    expect(calls).toContainEqual([
+      "aws",
+      "backup",
+      "delete-recovery-point",
+      "--backup-vault-name",
+      "cipher-production-recovery",
+      "--recovery-point-arn",
+      recoveryPointArn,
+      "--region",
+      "us-east-1",
+    ]);
+    expect(completed).toContain("Deleted 1 recovery point(s) from cipher-production-recovery.");
+  });
+
+  test("refuses an out-of-scope recovery point before deleting it", () => {
+    const { calls, runner } = createRunner({
+      existingStacks: ["CipherProductionControl"],
+      recoveryPoints: [
+        "arn:aws:dynamodb:us-east-1:000000000000:table/cipher-production-users/backup/unsafe",
+      ],
+    });
+
+    expect(() =>
+      runInfrastructureControl(
+        [
+          "destroy-all",
+          `--confirm=${confirmation("destroy-all")}`,
+          `--destroy-confirm=DESTROY-CIPHER-PRODUCTION-AND-ALL-DATA-${expectedAccount}-us-east-1`,
+        ],
+        interactiveEnvironment,
+        runner,
+        config,
+      ),
+    ).toThrow("out-of-scope recovery point");
+    expect(calls.some((command) => command[2] === "delete-recovery-point")).toBe(false);
   });
 
   test("keeps the complete dry-run plan scoped to four named stacks", () => {
@@ -237,12 +328,13 @@ describe("infrastructure controls", () => {
         .flat()
         .every((value) => !value.includes("*")),
     ).toBe(true);
-    expect(plannedCommands("resume", config)).toEqual([
+    expect(plannedCommands("resume", config, "release-20260822")).toEqual([
+      ["bun", "run", "infra:readiness"],
       [
         "npm",
         "--prefix",
         "infra",
-        "exec",
+        "run",
         "cdk",
         "--",
         "diff",
@@ -250,12 +342,14 @@ describe("infrastructure controls", () => {
         "CipherProductionControl",
         "CipherProductionNetwork",
         "CipherProductionRuntime",
+        "--parameters",
+        "CipherProductionRuntime:ServerImageTag=release-20260822",
       ],
       [
         "npm",
         "--prefix",
         "infra",
-        "exec",
+        "run",
         "cdk",
         "--",
         "deploy",
@@ -263,6 +357,8 @@ describe("infrastructure controls", () => {
         "CipherProductionControl",
         "CipherProductionNetwork",
         "CipherProductionRuntime",
+        "--parameters",
+        "CipherProductionRuntime:ServerImageTag=release-20260822",
         "--require-approval",
         "any-change",
       ],
@@ -357,6 +453,6 @@ describe("infrastructure controls", () => {
     expect(messages).toContain("Planned:");
     expect(messages).toContain("Completed:");
     expect(messages.some((message) => message.includes("storage costs"))).toBe(true);
-    expect(messages.some((message) => message.includes("retention can still apply"))).toBe(true);
+    expect(messages.some((message) => message.includes("provider-managed recovery"))).toBe(true);
   });
 });

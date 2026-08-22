@@ -58,10 +58,12 @@ does not apply it until the operator confirms it.
 ```sh
 bun --env-file=.env run infra:readiness
 bun --env-file=.env run infra:resume -- \
+  --image-tag=<retained-immutable-server-image-tag> \
   --confirm=RESUME-CIPHER-PRODUCTION-123456789012-us-east-1
 ```
 
-Use the account ID from the deployment configuration, not the example above.
-The subsequent deployment workflow adds its own protected approval boundary,
+Use the account ID from the deployment configuration and an exact image tag
+already present in Cipher's retained repository, not the examples above. The
+subsequent deployment workflow adds its own protected approval boundary,
 recovery point, smoke test, and cleanup; no console-created network resources
 are part of this design.
