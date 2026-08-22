@@ -1,7 +1,9 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "default",
-  "description": "Default desktop window permissions.",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "identifier": "main-webview",
+  "description": "Minimum permission set for the bundled main webview.",
+  "local": true,
+  "webviews": ["main"],
+  "platforms": ["macOS", "windows"],
+  "permissions": ["allow-desktop-status"]
 }

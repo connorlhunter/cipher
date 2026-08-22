@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "create": false,
         "title": "Cipher",
         "width": 1100,
         "height": 760,
@@ -25,24 +26,36 @@
         "connect-src": "ipc: http://ipc.localhost",
         "default-src": "'self'",
         "font-src": "'self'",
+        "form-action": "'none'",
+        "frame-ancestors": "'none'",
         "frame-src": "'none'",
-        "img-src": "'self' data:",
+        "img-src": "'self'",
+        "media-src": "'none'",
         "object-src": "'none'",
-        "style-src": "'self'"
+        "script-src": "'self'",
+        "style-src": "'self'",
+        "worker-src": "'none'"
       },
       "devCsp": {
         "base-uri": "'none'",
         "connect-src": "ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1420",
         "default-src": "'self'",
         "font-src": "'self'",
+        "form-action": "'none'",
+        "frame-ancestors": "'none'",
         "frame-src": "'none'",
-        "img-src": "'self' data:",
+        "img-src": "'self'",
+        "media-src": "'none'",
         "object-src": "'none'",
-        "style-src": "'self'"
+        "script-src": "'self'",
+        "style-src": "'self'",
+        "worker-src": "'none'"
       },
       "freezePrototype": true,
       "headers": {
-        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Resource-Policy": "same-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
         "X-Content-Type-Options": "nosniff"
       }
     }
