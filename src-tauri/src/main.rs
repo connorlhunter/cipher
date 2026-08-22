@@ -6,7 +6,7 @@ pub mod credential_store;
 pub mod transport;
 
 mod ipc;
-mod lifecycle;
+pub mod lifecycle;
 mod security;
 
 /// Returns the desktop core's current status for a compatible webview.

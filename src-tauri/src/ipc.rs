@@ -23,10 +23,6 @@ pub struct DesktopStatus {
 /// Typed error codes permitted across the Tauri boundary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[expect(
-    dead_code,
-    reason = "the complete public error vocabulary is fixed before later allowlisted commands use each variant"
-)]
 pub enum IpcErrorCode {
     /// A caller intentionally cancelled a cancellable operation.
     Cancelled,
