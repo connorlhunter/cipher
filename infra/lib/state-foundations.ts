@@ -246,7 +246,13 @@ function addMediaBucketGuards(bucket: s3.Bucket): void {
   bucket.addToResourcePolicy(
     new iam.PolicyStatement({
       actions: ["s3:PutObject"],
-      conditions: { StringEquals: { "s3:x-amz-content-sha256": "UNSIGNED-PAYLOAD" } },
+      // The S3 clients used by Cipher may send an unsigned body as either a
+      // single chunk or an aws-chunked stream with a trailing checksum.
+      conditions: {
+        StringLike: {
+          "s3:x-amz-content-sha256": ["UNSIGNED-PAYLOAD", "STREAMING-UNSIGNED-PAYLOAD*"],
+        },
+      },
       effect: iam.Effect.DENY,
       principals: [new iam.AnyPrincipal()],
       resources: [bucket.arnForObjects("*")],
