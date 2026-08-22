@@ -56,7 +56,9 @@ jobs:
         run: bun run infra:readiness
       - name: Publish production change plan
         run: |
-          npm --prefix infra exec cdk -- diff \
+          npm --prefix infra exec cdk -- \
+            --app "npm --prefix infra exec tsx -- infra/bin/cipher.ts" \
+            diff \
             "$CIPHER_STATE_STACK" \
             "$CIPHER_CONTROL_STACK" \
             "$CIPHER_NETWORK_STACK" \
@@ -175,7 +177,9 @@ jobs:
           done
       - name: Deploy the reviewed production change
         run: |
-          npm --prefix infra exec cdk -- deploy \
+          npm --prefix infra exec cdk -- \
+            --app "npm --prefix infra exec tsx -- infra/bin/cipher.ts" \
+            deploy \
             "$CIPHER_STATE_STACK" \
             "$CIPHER_CONTROL_STACK" \
             "$CIPHER_NETWORK_STACK" \

@@ -118,11 +118,21 @@ export function parseArguments(args: string[]): ParsedArguments {
 }
 
 /**
- * @param args - CDK arguments to append after the infrastructure package script separator.
- * @returns A command that runs the infrastructure package's CDK script.
+ * @param args - CDK arguments to append after the infrastructure package executable separator.
+ * @returns A command that resolves and runs Cipher's infrastructure app from the repository root.
  */
 function cdkCommand(...args: string[]): string[] {
-  return ["npm", "--prefix", "infra", "run", "cdk", "--", ...args];
+  return [
+    "npm",
+    "--prefix",
+    "infra",
+    "exec",
+    "cdk",
+    "--",
+    "--app",
+    "npm --prefix infra exec tsx -- infra/bin/cipher.ts",
+    ...args,
+  ];
 }
 
 /**
