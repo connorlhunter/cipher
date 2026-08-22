@@ -7,6 +7,9 @@ import { productionIngress } from "./production-ingress.js";
 const productionNetworkCidr = "10.72.0.0/16";
 const productionResourcePrefix = "cipher-production";
 
+/** Explicit zone names keep the production VPC synthesis independent of AWS calls. */
+export const productionNetworkAvailabilityZones = ["us-east-1a", "us-east-1b"] as const;
+
 /** Tags applied to every production network resource for ownership and cost allocation. */
 export const productionNetworkTags = {
   Application: "cipher",
@@ -99,6 +102,26 @@ function addProductionTags(stack: cdk.Stack): void {
   for (const [key, value] of Object.entries(productionNetworkTags)) {
     cdk.Tags.of(stack).add(key, value);
   }
+}
+
+/**
+ * CDK's VPC construct normally queries the account for availability zones during
+ * synthesis. Cipher has exactly one region and VPC, so record its two names in
+ * the app context before network stacks are constructed instead.
+ *
+ * @param app - CDK application that owns Cipher's production stacks.
+ * @param account - Configured production AWS account ID.
+ * @param region - Configured production AWS region.
+ */
+export function configureProductionNetworkContext(
+  app: cdk.App,
+  account: string,
+  region: string,
+): void {
+  app.node.setContext(
+    `availability-zones:account=${account}:region=${region}`,
+    productionNetworkAvailabilityZones,
+  );
 }
 
 /**
