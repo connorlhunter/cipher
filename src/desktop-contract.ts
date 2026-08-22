@@ -12,6 +12,7 @@ export const desktopProtocol = {
 /** Commands the webview is permitted to invoke in this release. */
 export const desktopCommands = {
   status: "desktop_status",
+  diagnostics: "desktop_diagnostics",
 } as const;
 
 /** The largest display-only status message accepted from the native core. */
@@ -22,9 +23,29 @@ export interface DesktopStatus {
   message: string;
 }
 
-/** Lifecycle events that may be sent from Rust to the webview. */
-export type DesktopLifecycleEvent =
-  { kind: "ready"; protocolVersion: number } | { kind: "shutdown"; protocolVersion: number };
+/** The native lifecycle states safe to show in a desktop diagnostics view. */
+export const desktopLifecycleStates = [
+  "starting",
+  "active",
+  "locked",
+  "sleeping",
+  "offline",
+  "shutting_down",
+  "stopped",
+] as const;
+
+/** The native transport states safe to show in a desktop diagnostics view. */
+export const nativeTransportStates = ["ready", "paused", "offline"] as const;
+
+/** A bounded, content-free desktop diagnostics view. */
+export interface DesktopDiagnostics {
+  lifecycleState: (typeof desktopLifecycleStates)[number];
+  transportState: (typeof nativeTransportStates)[number];
+  rendererEpoch: number;
+  activeOperations: number;
+  coldStarts: number;
+  wakes: number;
+}
 
 /** Typed error codes that can cross the native boundary. */
 export type DesktopIpcErrorCode =
@@ -58,7 +79,50 @@ export function parseDesktopStatus(value: unknown): DesktopStatus {
   return { message: value.message };
 }
 
+/** Validates a bounded diagnostic export without accepting arbitrary native state. */
+export function parseDesktopDiagnostics(value: unknown): DesktopDiagnostics {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Object.keys(value).length !== 6 ||
+    !(
+      "lifecycleState" in value &&
+      "transportState" in value &&
+      "rendererEpoch" in value &&
+      "activeOperations" in value &&
+      "coldStarts" in value &&
+      "wakes" in value
+    ) ||
+    !desktopLifecycleStates.includes(
+      value.lifecycleState as (typeof desktopLifecycleStates)[number],
+    ) ||
+    !nativeTransportStates.includes(
+      value.transportState as (typeof nativeTransportStates)[number],
+    ) ||
+    !isSafeCounter(value.rendererEpoch) ||
+    !isSafeCounter(value.activeOperations) ||
+    value.activeOperations > 32 ||
+    !isSafeCounter(value.coldStarts) ||
+    !isSafeCounter(value.wakes)
+  ) {
+    throw new Error("The desktop core returned invalid diagnostics.");
+  }
+
+  return {
+    lifecycleState: value.lifecycleState as DesktopDiagnostics["lifecycleState"],
+    transportState: value.transportState as DesktopDiagnostics["transportState"],
+    rendererEpoch: value.rendererEpoch,
+    activeOperations: value.activeOperations,
+    coldStarts: value.coldStarts,
+    wakes: value.wakes,
+  };
+}
+
 /** Returns whether a desktop protocol version is temporarily compatible. */
 export function supportsDesktopProtocol(version: number): boolean {
   return version === desktopProtocol.current || version === desktopProtocol.previous;
+}
+
+function isSafeCounter(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
