@@ -4,18 +4,17 @@ import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
-import * as logs from "aws-cdk-lib/aws-logs";
 import * as route53 from "aws-cdk-lib/aws-route53";
 import * as route53Targets from "aws-cdk-lib/aws-route53-targets";
+import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 
 import type { ProductionControl } from "./production-control.js";
 import { productionIngress } from "./production-ingress.js";
-import type { ProductionNetwork } from "./production-network.js";
+import { addProductionTags, type ProductionNetwork } from "./production-network.js";
 import type { StateFoundations } from "./state-foundations.js";
 
 const serverContainerName = "cipher-server";
 const serverImageTagDefault = "bootstrap";
-const serverLogGroupName = "/cipher/production/server";
 const serverServiceName = "cipher-production-server";
 const serverTaskFamily = "cipher-production-server";
 
@@ -25,6 +24,8 @@ export interface ProductionRuntimeSettings {
   readonly certificateArn: string;
   /** Existing Route 53 hosted-zone ID for Cipher's public hostname. */
   readonly hostedZoneId: string;
+  /** Optional Secrets Manager secret delivered only through the ECS execution role. */
+  readonly runtimeSecretArn?: string;
 }
 
 /** Runtime resources that deployment and smoke checks consume. */
@@ -55,6 +56,8 @@ export function addProductionRuntime(
   control: ProductionControl,
   settings: ProductionRuntimeSettings,
 ): ProductionRuntime {
+  addProductionTags(stack);
+
   const imageTag = new cdk.CfnParameter(stack, "ServerImageTag", {
     allowedPattern: "[A-Za-z0-9][A-Za-z0-9._-]{0,127}",
     default: serverImageTagDefault,
@@ -75,24 +78,22 @@ export function addProductionRuntime(
     containerInsightsV2: ecs.ContainerInsights.ENABLED,
     vpc: network.vpc,
   });
-  const logGroup = new logs.LogGroup(stack, "ServerLogGroup", {
-    logGroupName: serverLogGroupName,
-    removalPolicy: cdk.RemovalPolicy.RETAIN,
-    retention: logs.RetentionDays.ONE_MONTH,
-  });
   const taskDefinition = new ecs.FargateTaskDefinition(stack, "TaskDefinition", {
     cpu: 256,
+    executionRole: control.executionRole,
     family: serverTaskFamily,
     memoryLimitMiB: 512,
+    taskRole: control.taskRole,
   });
   const container = taskDefinition.addContainer("CipherServer", {
     environment: serverEnvironment(state),
     image: ecs.ContainerImage.fromEcrRepository(control.serverRepository, imageTag.valueAsString),
     logging: ecs.LogDrivers.awsLogs({
-      logGroup,
+      logGroup: control.serverLogGroup,
       streamPrefix: serverContainerName,
     }),
   });
+  addOptionalRuntimeSecret(stack, container, control, settings.runtimeSecretArn);
   container.addPortMappings({ containerPort: productionIngress.task.port });
 
   const service = new ecs.FargateService(stack, "Service", {
@@ -149,6 +150,31 @@ export function addProductionRuntime(
   addOutput(stack, "ServerServiceName", service.serviceName);
 
   return { loadBalancer, service };
+}
+
+/**
+ * Adds one optional Secrets Manager value without placing its plaintext in source or templates.
+ *
+ * @param stack - Stack importing the configured secret ARN.
+ * @param container - Container that receives the secret through ECS at launch.
+ * @param control - Control resources owning the constrained execution role.
+ * @param runtimeSecretArn - Complete ARN of the optional production runtime secret.
+ */
+function addOptionalRuntimeSecret(
+  stack: cdk.Stack,
+  container: ecs.ContainerDefinition,
+  control: ProductionControl,
+  runtimeSecretArn: string | undefined,
+): void {
+  if (runtimeSecretArn === undefined) return;
+
+  const runtimeSecret = secretsmanager.Secret.fromSecretCompleteArn(
+    stack,
+    "RuntimeSecret",
+    runtimeSecretArn,
+  );
+  runtimeSecret.grantRead(control.executionRole);
+  container.addSecret("CIPHER_RUNTIME_SECRET", ecs.Secret.fromSecretsManager(runtimeSecret));
 }
 
 /**

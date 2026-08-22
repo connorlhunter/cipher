@@ -32,6 +32,7 @@
     "format:check": "bun x prettier --check . --ignore-unknown && cargo fmt --check",
     "infra:install": "npm --prefix infra ci",
     "infra:destroy-all": "bun scripts/infra-control.ts destroy-all",
+    "infra:certificate": "bun scripts/provision-production-certificate.ts",
     "live:fixtures": "bun scripts/live-fixtures.ts",
     "infra:pause": "bun scripts/infra-control.ts pause",
     "infra:readiness": "bun scripts/infra-readiness.ts",
