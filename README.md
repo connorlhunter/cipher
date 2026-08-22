@@ -44,7 +44,7 @@ After `CipherProductionState` is deployed, use its outputs to replace these igno
 
 `MediaPendingPrefix`, `MediaReadyPrefix`, and `MediaFixturePrefix` describe the S3 key roots enforced by the state stack. Run `bun --env-file=.env run live:fixtures` to validate the deployed Cognito, DynamoDB, and S3 settings with a fresh UUID-scoped fixture run. It refuses an incorrect production account or State output, requires DynamoDB and S3 ownership markers before cleanup, and verifies that unmarked same-prefix sentinels remain untouched.
 
-The state policy enforces TLS, SSE-S3, and those key roots. A later signed upload command must bind the SHA-256 checksum header, then verify it with `HeadObject`; S3 does not expose that checksum header as a bucket-policy condition key.
+The state policy enforces TLS, SSE-S3, and those key roots. The live media fixture binds a SHA-256 checksum on its exact upload and verifies the checksum, content length, and SSE-S3 metadata with `HeadObject`. Every future signed application upload must use the same boundary; S3 does not expose that checksum header as a bucket-policy condition key.
 
 `bun run infra:readiness` requires exactly one Cognito pool, four DynamoDB tables, one S3 bucket, and the seven configuration outputs above in the synthesized state stack. It retains presence-only checks for the control, network, and runtime stacks while those foundations are completed.
 
