@@ -1,0 +1,16 @@
+[package]
+name = "cipher-native-transport"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+cipher-realtime-protocol = { path = "../cipher-realtime-protocol", version = "^0.1.0-prealpha.6" }
+cipher-types = { path = "../cipher-types", version = "^0.1.0-prealpha.6" }
+serde.workspace = true
+serde_json.workspace = true
