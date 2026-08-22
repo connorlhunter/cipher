@@ -6,7 +6,7 @@ Cipher has one production account and four exact CloudFormation stacks:
 - `CipherProductionControl` retains immutable images, deployment access, logs, backups, and cost controls.
 - `CipherProductionNetwork` and `CipherProductionRuntime` are the disposable runtime boundary.
 
-The deployment workflow runs only from `main` through GitHub's protected `production` environment. It exchanges a GitHub OpenID Connect token for the scoped `cipher-production-deployment` role; no long-lived AWS key is stored in the repository or deployment environment. The IAM trust policy accepts only `repo:connorlhunter/cipher:environment:production` tokens. Configure that GitHub environment with a required reviewer and a `main` branch rule before enabling dispatches.
+The deployment workflow runs only from `main` through GitHub's protected `production` environment. It exchanges a GitHub OpenID Connect token for the scoped `cipher-production-deployment` role; no long-lived AWS key is stored in the repository or deployment environment. The IAM trust policy accepts only `repo:connorlhunter/cipher:environment:production` tokens. The role can read only these stacks and the protected CDK bootstrap stack, and it can wait only for Cipher's one ECS service. AWS Backup's `StartBackupJob` action has no resource-level IAM authorization, so the workflow fixes its DynamoDB resource list and can pass only Cipher's dedicated backup role. Configure that GitHub environment with a required reviewer and a `main` branch rule before enabling dispatches.
 
 ## One-time bootstrap
 

@@ -40,6 +40,7 @@ const control = new cdk.Stack(app, config.stacks.control, {
 const productionControl = addProductionControl(control, stateFoundations, {
   allowDestruction: allowPersistentDestruction,
   budgetAlertEmail: config.budgetAlertEmail,
+  stackNames: config.stacks,
 });
 
 const network = new cdk.Stack(app, config.stacks.network, {

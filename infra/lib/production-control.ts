@@ -19,7 +19,10 @@ const productionBackupRoleName = "cipher-production-AWSBackup";
 const githubOidcProviderUrl = "https://token.actions.githubusercontent.com";
 const githubDeploymentSubject = "repo:connorlhunter/cipher:environment:production";
 const cdkBootstrapQualifier = "hnb659fds";
+const cdkBootstrapStackName = "CDKToolkit";
 const productionLogGroupName = "/cipher/production/server";
+const productionClusterName = "cipher-production";
+const productionServiceName = "cipher-production-server";
 
 /** Image resources retained while the runtime and network are paused. */
 export interface ProductionControl {
@@ -39,12 +42,26 @@ export interface ProductionControl {
   readonly serverLogGroup: logs.LogGroup;
 }
 
+/** Exact CloudFormation stack names that the protected deployment path may inspect. */
+export interface ProductionStackNames {
+  /** Retained deployment, image, backup, and log controls. */
+  readonly control: string;
+  /** Disposable public network boundary. */
+  readonly network: string;
+  /** Disposable ECS service and ingress. */
+  readonly runtime: string;
+  /** Protected identity and application state. */
+  readonly state: string;
+}
+
 /** Controls supplied from deployment configuration rather than source code. */
 export interface ProductionControlSettings {
   /** Address that receives the production cost budget notifications. */
   readonly budgetAlertEmail: string;
   /** Enables removal only while the fully confirmed teardown flow is running. */
   readonly allowDestruction?: boolean;
+  /** Only these four Cipher stacks may be read by the deployment workflow. */
+  readonly stackNames: ProductionStackNames;
 }
 
 /**
@@ -138,7 +155,13 @@ export function addProductionControl(
     role: backupRole,
   });
 
-  addDeploymentPermissions(deploymentRole, state, backupVault, backupRole, serverRepository);
+  addDeploymentPermissions(
+    deploymentRole,
+    state,
+    backupRole,
+    serverRepository,
+    settings.stackNames,
+  );
   addExecutionPermissions(executionRole, serverRepository, serverLogGroup);
   addBudget(stack, settings.budgetAlertEmail);
 
@@ -160,20 +183,20 @@ export function addProductionControl(
 }
 
 /**
- * Grants the deployment role only the concrete image, CDK bootstrap, fixture, and recovery actions.
+ * Grants the deployment role only the concrete image, stack-read, service-health, fixture, and recovery actions.
  *
  * @param deploymentRole - Web-identity role used by the deployment workflow.
  * @param state - Persistent resources that the workflow validates with owned fixtures.
- * @param backupVault - Vault that stores bounded pre-deployment recovery points.
  * @param backupRole - Service role passed only to AWS Backup.
  * @param serverRepository - Immutable application image repository.
+ * @param stackNames - Exact Cipher stacks whose outputs the workflow may read.
  */
 function addDeploymentPermissions(
   deploymentRole: iam.Role,
   state: StateFoundations,
-  backupVault: backup.BackupVault,
   backupRole: iam.Role,
   serverRepository: ecr.Repository,
+  stackNames: ProductionStackNames,
 ): void {
   serverRepository.grantPullPush(deploymentRole);
   deploymentRole.addToPolicy(
@@ -184,6 +207,40 @@ function addDeploymentPermissions(
         cdkBootstrapRoleArn("file-publishing"),
         cdkBootstrapRoleArn("image-publishing"),
         cdkBootstrapRoleArn("lookup"),
+      ],
+    }),
+  );
+  const stack = cdk.Stack.of(deploymentRole);
+  deploymentRole.addToPolicy(
+    new iam.PolicyStatement({
+      actions: ["cloudformation:DescribeStacks"],
+      resources: [cdkBootstrapStackName, ...Object.values(stackNames)].map((stackName) =>
+        stack.formatArn({
+          service: "cloudformation",
+          resource: "stack",
+          resourceName: `${stackName}/*`,
+        }),
+      ),
+    }),
+  );
+  deploymentRole.addToPolicy(
+    new iam.PolicyStatement({
+      actions: ["ecs:DescribeServices"],
+      conditions: {
+        ArnEquals: {
+          "ecs:cluster": stack.formatArn({
+            service: "ecs",
+            resource: "cluster",
+            resourceName: productionClusterName,
+          }),
+        },
+      },
+      resources: [
+        stack.formatArn({
+          service: "ecs",
+          resource: "service",
+          resourceName: `${productionClusterName}/${productionServiceName}`,
+        }),
       ],
     }),
   );
@@ -223,8 +280,10 @@ function addDeploymentPermissions(
   );
   deploymentRole.addToPolicy(
     new iam.PolicyStatement({
+      // AWS Backup does not support resource-level authorization for StartBackupJob.
+      // The workflow remains constrained to Cipher tables by its fixed command and backup role.
       actions: ["backup:StartBackupJob"],
-      resources: [backupVault.backupVaultArn],
+      resources: ["*"],
     }),
   );
   deploymentRole.addToPolicy(
