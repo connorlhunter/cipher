@@ -17,6 +17,8 @@ use serde::Deserialize;
 const MAX_JWKS_BYTES: usize = 64 * 1024;
 const MAX_JWKS_KEYS: usize = 16;
 const MAX_KEY_ID_BYTES: usize = 512;
+const JWKS_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const JWKS_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A verified Cognito identity claim, retained only after JWT validation.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -275,6 +277,56 @@ impl CognitoTokenPolicy {
 pub trait JwksSource: Send + Sync {
     /// Returns the unmodified current JWKS payload.
     fn fetch_jwks(&self) -> Result<String, AuthenticationError>;
+}
+
+/// HTTPS JWKS source for a single, already validated Cognito issuer.
+pub struct HttpJwksSource {
+    client: reqwest::blocking::Client,
+    url: reqwest::Url,
+}
+
+impl HttpJwksSource {
+    /// Creates the exact Cognito JWKS endpoint derived from an issuer URL.
+    pub fn new(issuer: &str) -> Result<Self, AuthenticationError> {
+        let issuer =
+            reqwest::Url::parse(issuer).map_err(|_| AuthenticationError::SigningKeysUnavailable)?;
+        if issuer.scheme() != "https" || issuer.query().is_some() || issuer.fragment().is_some() {
+            return Err(AuthenticationError::SigningKeysUnavailable);
+        }
+        let url = issuer
+            .join(".well-known/jwks.json")
+            .map_err(|_| AuthenticationError::SigningKeysUnavailable)?;
+        let client = reqwest::blocking::Client::builder()
+            .connect_timeout(JWKS_CONNECT_TIMEOUT)
+            .timeout(JWKS_REQUEST_TIMEOUT)
+            .build()
+            .map_err(|_| AuthenticationError::SigningKeysUnavailable)?;
+        Ok(Self { client, url })
+    }
+}
+
+impl JwksSource for HttpJwksSource {
+    fn fetch_jwks(&self) -> Result<String, AuthenticationError> {
+        let response = self
+            .client
+            .get(self.url.clone())
+            .send()
+            .map_err(|_| AuthenticationError::SigningKeysUnavailable)?;
+        if !response.status().is_success()
+            || response
+                .content_length()
+                .is_some_and(|length| length > MAX_JWKS_BYTES as u64)
+        {
+            return Err(AuthenticationError::SigningKeysUnavailable);
+        }
+        let document = response
+            .text()
+            .map_err(|_| AuthenticationError::SigningKeysUnavailable)?;
+        if document.len() > MAX_JWKS_BYTES {
+            return Err(AuthenticationError::SigningKeysUnavailable);
+        }
+        Ok(document)
+    }
 }
 
 /// A bounded cached Cognito RS256 verifier suitable for server requests.
