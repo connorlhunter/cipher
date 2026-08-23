@@ -607,7 +607,9 @@ impl NativeAuthError {
     pub const fn message(self) -> &'static str {
         match self.code {
             NativeAuthErrorCode::Cancelled => "The authentication attempt was cancelled.",
-            NativeAuthErrorCode::InvalidRequest => "The authentication request is invalid.",
+            NativeAuthErrorCode::InvalidRequest => {
+                "Check the information you entered and try again."
+            }
             NativeAuthErrorCode::InvalidCredentials => {
                 "The sign-in or invitation could not be completed."
             }
@@ -830,13 +832,18 @@ fn validate_pool_id(pool_id: &str) -> Result<(), NativeAuthError> {
 }
 
 fn validate_identifier(identifier: &str) -> Result<(), NativeAuthError> {
+    let valid_email = identifier
+        .split_once('@')
+        .is_some_and(|(local, domain)| !local.is_empty() && domain.contains('.'));
+    let valid_username = (3..=64).contains(&identifier.len())
+        && identifier
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'));
     let valid = !identifier.is_empty()
         && identifier.len() <= MAX_AUTH_IDENTIFIER_BYTES
         && identifier.trim() == identifier
         && !identifier.bytes().any(|byte| byte.is_ascii_control())
-        && identifier
-            .split_once('@')
-            .is_some_and(|(local, domain)| !local.is_empty() && domain.contains('.'));
+        && (valid_email || valid_username);
     if valid {
         Ok(())
     } else {
@@ -1494,7 +1501,7 @@ mod tests {
     fn request_validation_and_debug_never_echo_credentials() {
         for request in [
             AuthenticationRequest::SignIn {
-                identifier: SecretText::new("invalid"),
+                identifier: SecretText::new("not valid"),
                 password: SecretText::new(PASSWORD),
             },
             AuthenticationRequest::AcceptAdministratorInvitation {

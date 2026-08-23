@@ -1,6 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { useMutation } from "@tanstack/react-query";
-import { type JSX, useId, useState } from "react";
+import { LoaderCircle } from "lucide-react";
+import { type JSX, useEffect, useId, useState } from "react";
 import { z } from "zod";
 
 import { Badge } from "../../components/ui/badge";
@@ -27,15 +28,23 @@ const verificationValues = z.object({
   code: z.string().regex(/^\d{6}$/, "Enter the six-digit verification code."),
 });
 
+type IdentifierStatus = "idle" | "checking" | "ready" | "invalid";
+
 /** A one-time form that submits credentials directly to the native authentication boundary. */
-export function SignInForm(): JSX.Element {
+export function SignInForm({
+  authenticate = desktopAuthenticate,
+}: {
+  authenticate?: (request: DesktopAuthenticationRequest) => Promise<DesktopAuthenticationView>;
+} = {}): JSX.Element {
   const identifierId = useId();
   const passwordId = useId();
   const verificationId = useId();
   const [result, setResult] = useState<DesktopAuthenticationView | undefined>();
   const [challengeRequired, setChallengeRequired] = useState(false);
+  const [identifier, setIdentifier] = useState("");
+  const [identifierStatus, setIdentifierStatus] = useState<IdentifierStatus>("idle");
   const mutation = useMutation({
-    mutationFn: (request: DesktopAuthenticationRequest) => desktopAuthenticate(request),
+    mutationFn: (request: DesktopAuthenticationRequest) => authenticate(request),
     retry: false,
   });
   const form = useForm({
@@ -55,17 +64,29 @@ export function SignInForm(): JSX.Element {
         setResult({ state: "failed", message: "Authentication is temporarily unavailable." });
       } finally {
         form.reset(initialValues);
+        setIdentifier("");
       }
     },
   });
+
+  useEffect(() => {
+    const value = identifier.trim();
+    if (!value) {
+      setIdentifierStatus("idle");
+      return;
+    }
+    setIdentifierStatus("checking");
+    const timer = window.setTimeout(() => {
+      setIdentifierStatus(isValidIdentifier(value) ? "ready" : "invalid");
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [identifier]);
 
   return (
     <Card className="w-full max-w-md p-panel">
       <Badge tone="neutral">Secure sign-in</Badge>
       <h1 className="type-page-title mt-paragraph">Welcome to Cipher</h1>
-      <p className="type-body-muted mt-paragraph">
-        Your credentials are submitted once to the native desktop security boundary.
-      </p>
+      <p className="type-body-muted mt-paragraph">Sign in to continue.</p>
       {challengeRequired ? (
         <VerificationForm
           id={verificationId}
@@ -96,9 +117,13 @@ export function SignInForm(): JSX.Element {
                   id={identifierId}
                   maxLength={320}
                   onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value)}
+                  onChange={(event) => {
+                    field.handleChange(event.target.value);
+                    setIdentifier(event.target.value);
+                  }}
                   value={field.state.value}
                 />
+                <IdentifierStatus status={identifierStatus} />
                 <FieldError id={`${identifierId}-error`} message={field.state.meta.errors[0]} />
               </div>
             )}
@@ -114,6 +139,7 @@ export function SignInForm(): JSX.Element {
                   autoComplete="current-password"
                   id={passwordId}
                   maxLength={512}
+                  disabled={identifierStatus !== "ready"}
                   onBlur={field.handleBlur}
                   onChange={(event) => field.handleChange(event.target.value)}
                   type="password"
@@ -123,10 +149,17 @@ export function SignInForm(): JSX.Element {
               </div>
             )}
           </form.Field>
-          <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting] as const}>
-            {([canSubmit, isSubmitting]) => (
-              <Button disabled={!canSubmit || isSubmitting} type="submit">
-                {isSubmitting ? "Signing in…" : "Sign in"}
+          <form.Subscribe
+            selector={(state) =>
+              [state.canSubmit, state.isSubmitting, state.values.password] as const
+            }
+          >
+            {([canSubmit, isSubmitting, password]) => (
+              <Button
+                disabled={!canSubmit || isSubmitting || !password || identifierStatus !== "ready"}
+                type="submit"
+              >
+                {isSubmitting ? <LoadingLabel label="Signing in…" /> : "Sign in"}
               </Button>
             )}
           </form.Subscribe>
@@ -138,8 +171,9 @@ export function SignInForm(): JSX.Element {
           className={
             result.state === "authenticated"
               ? "mt-paragraph type-caption text-success"
-              : "mt-paragraph type-caption text-muted"
+              : "mt-paragraph type-caption text-destructive"
           }
+          role={result.state === "failed" ? "alert" : "status"}
         >
           {result.message}
         </p>
@@ -200,7 +234,7 @@ function VerificationForm({
       <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting] as const}>
         {([canSubmit, isSubmitting]) => (
           <Button disabled={!canSubmit || isSubmitting} type="submit">
-            {isSubmitting ? "Verifying…" : "Verify"}
+            {isSubmitting ? <LoadingLabel label="Verifying…" /> : "Verify"}
           </Button>
         )}
       </form.Subscribe>
@@ -217,4 +251,41 @@ function FieldError({ id, message }: { id: string; message: unknown }): JSX.Elem
       {message}
     </p>
   );
+}
+
+function IdentifierStatus({ status }: { status: IdentifierStatus }): JSX.Element | null {
+  if (status === "idle") {
+    return null;
+  }
+  if (status === "checking") {
+    return (
+      <p className="type-caption flex items-center gap-2 text-muted" role="status">
+        <LoaderCircle aria-hidden="true" className="animate-spin" size={14} strokeWidth={1.8} />
+        Checking…
+      </p>
+    );
+  }
+  return (
+    <p
+      className={status === "ready" ? "type-caption text-success" : "type-caption text-destructive"}
+    >
+      {status === "ready" ? "Looks good." : "Enter a valid email or username."}
+    </p>
+  );
+}
+
+function LoadingLabel({ label }: { label: string }): JSX.Element {
+  return (
+    <>
+      <LoaderCircle aria-hidden="true" className="animate-spin" size={16} strokeWidth={1.8} />
+      {label}
+    </>
+  );
+}
+
+function isValidIdentifier(value: string): boolean {
+  const email = value.split("@");
+  const validEmail = email.length === 2 && email[0]!.length > 0 && email[1]!.includes(".");
+  const validUsername = /^[A-Za-z0-9._-]{3,64}$/u.test(value);
+  return validEmail || validUsername;
 }

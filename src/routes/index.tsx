@@ -44,23 +44,17 @@ export function OverviewRoute(): JSX.Element {
   return (
     <section
       aria-labelledby="overview-title"
-      className="mx-auto grid max-w-3xl gap-section py-5 lg:py-9"
+      className="mx-auto grid min-h-full max-w-2xl place-items-center py-5 text-center lg:py-9"
     >
-      <div>
-        <Badge tone="success">Desktop ready</Badge>
-        <h1 className="type-display mt-paragraph" id="overview-title">
-          A calm, focused place for Cipher
+      <div className="grid justify-items-center">
+        <img alt="Cipher" className="size-20" src="/cipher-mark.svg" />
+        <h1 className="type-display mt-section" id="overview-title">
+          Cipher
         </h1>
         <p className="type-body-muted mt-paragraph max-w-prose">
-          The desktop shell is ready for secure conversation features. Appearance, focus, and layout
-          behavior are shared across every view.
+          Private, secure messaging for the people you trust.
         </p>
       </div>
-      <dl className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3">
-        <Metadata label="Appearance" value="Native-controlled" />
-        <Metadata label="Typography" value="System UI" />
-        <Metadata label="Layout" value="Zoom-ready" />
-      </dl>
     </section>
   );
 }
@@ -74,16 +68,11 @@ export function AppearanceRoute(): JSX.Element {
         Appearance
       </h1>
       <p className="type-body-muted mt-paragraph max-w-prose">
-        Choose system appearance or an explicit color scheme. Cipher stores that non-secret
-        preference in native application configuration and applies one resolved appearance to the
-        desktop frame and webview.
+        Choose the look that feels right for you.
       </p>
       <Card className="mt-section p-panel">
         <h2 className="type-section-title">Theme</h2>
-        <p className="type-body-muted mt-paragraph">
-          System follows the current operating-system appearance; explicit schemes keep their own
-          light or dark native window treatment.
-        </p>
+        <p className="type-body-muted mt-paragraph">Use your system setting or choose a theme.</p>
         <div className="mt-panel">
           <ThemePreferenceControl />
         </div>
@@ -95,18 +84,9 @@ export function AppearanceRoute(): JSX.Element {
 /** The credential-entry route keeps browser history and persisted state free of secrets. */
 export function SignInRoute(): JSX.Element {
   return (
-    <section className="mx-auto grid max-w-3xl place-items-start py-5 lg:py-9">
+    <section className="mx-auto grid min-h-full max-w-3xl place-items-center py-5 lg:py-9">
       <SignInForm />
     </section>
-  );
-}
-
-function Metadata({ label, value }: { label: string; value: string }): JSX.Element {
-  return (
-    <div className="bg-surface px-4 py-4">
-      <dt className="type-label uppercase tracking-[0.12em] text-muted">{label}</dt>
-      <dd className="type-caption mt-2 font-medium text-text">{value}</dd>
-    </div>
   );
 }
 
