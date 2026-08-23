@@ -19,8 +19,10 @@ tauri-build = { version = "^2.6.3", features = [] }
 cipher-desktop-lifecycle = { path = "../crates/cipher-desktop-lifecycle", version = "^0.1.0-prealpha.8" }
 cipher-types = { path = "../crates/cipher-types", version = "^0.1.0-prealpha.8" }
 cipher-native-transport = { path = "../crates/cipher-native-transport", version = "^0.1.0-prealpha.8" }
+jsonwebtoken = { version = "^10.4.0", default-features = false, features = ["aws_lc_rs"] }
 keyring-core = "^1.0.0"
 serde.workspace = true
+serde_json.workspace = true
 sha2 = "^0.10.9"
 tauri = { version = "^2.11.5", features = [] }
 zeroize = "^1.8.2"
