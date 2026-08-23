@@ -177,10 +177,12 @@ function UninstallCipher(): JSX.Element {
           onChange={(event) => setRemoveLocalData(event.currentTarget.checked)}
           type="checkbox"
         />
-        <span>Remove local Cipher data from this device</span>
+        <span>Remove saved credentials from this device</span>
       </label>
       <p className="type-caption text-muted">
-        Cipher will close and open this device&apos;s uninstall flow.
+        This removes saved refresh credentials from Keychain or Credential Manager, but does not
+        delete your Cipher account, server-side messages, or remote data. Cipher will then close and
+        open this device&apos;s uninstall flow.
       </p>
       {unavailable ? (
         <p className="type-caption text-destructive" role="status">
@@ -234,7 +236,8 @@ export function DeviceSettings(): JSX.Element {
         <div>
           <h2 className="type-section-title">Uninstall Cipher</h2>
           <p className="type-body-muted mt-paragraph max-w-prose">
-            Remove Cipher from this device and choose what happens to local data.
+            Remove Cipher from this device and choose whether saved credentials stay available for a
+            future reinstall.
           </p>
         </div>
         <div className="mt-auto pt-panel">
