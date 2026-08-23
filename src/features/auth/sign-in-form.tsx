@@ -92,7 +92,10 @@ export function SignInForm({
   }, [identifier]);
 
   return (
-    <Card className="w-full max-w-md p-panel">
+    <Card className="relative w-full max-w-md p-panel">
+      <div className="absolute right-5 top-5 flex size-9 items-center justify-center rounded-md bg-elevated p-1.5">
+        <img alt="Cipher" className="size-full" src="/cipher-mark.svg" />
+      </div>
       <Badge
         aria-label="End-to-end encryption"
         title="End-to-end encrypted: only you and the people you message can read your conversations."

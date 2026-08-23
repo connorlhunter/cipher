@@ -51,39 +51,43 @@ export function OverviewRoute(): JSX.Element {
       className="mx-auto grid min-h-full max-w-2xl place-items-center py-5 text-center lg:py-9"
     >
       <div className="grid justify-items-center">
-        <img alt="Cipher" className="size-20" src="/cipher-mark.svg" />
-        <h1 className="type-display mt-section" id="overview-title">
-          Cipher
-        </h1>
-        <p className="type-body-muted mt-paragraph max-w-prose">
-          A private space for the conversations that matter most.
-        </p>
-        <p
-          aria-label="End-to-end encryption"
-          className="type-caption mt-paragraph inline-flex items-center gap-2 text-muted"
-          title="End-to-end encrypted: only you and the people you message can read your conversations."
-        >
-          <LockKeyhole aria-hidden="true" size={15} strokeWidth={1.8} />
-          Built for E2EE
-        </p>
-        <div className="mt-section flex flex-wrap justify-center gap-3">
-          <Link className={buttonVariants()} to="/sign-in">
-            <LogIn aria-hidden="true" size={17} strokeWidth={1.8} />
-            Log in
-          </Link>
-          <button
-            aria-describedby="sign-up-coming-soon"
-            className={cn(buttonVariants({ variant: "secondary" }))}
-            disabled
-            type="button"
-          >
-            <UserPlus aria-hidden="true" size={17} strokeWidth={1.8} />
-            Sign up
-          </button>
+        <div className="cipher-welcome-mark flex size-20 items-center justify-center rounded-[1.375rem] bg-elevated p-3">
+          <img alt="Cipher" className="size-full" src="/cipher-mark.svg" />
         </div>
-        <p className="type-caption mt-2 text-muted" id="sign-up-coming-soon">
-          Sign up is coming soon.
-        </p>
+        <div className="cipher-welcome-content grid justify-items-center">
+          <h1 className="type-display mt-section" id="overview-title">
+            Cipher
+          </h1>
+          <p className="type-body-muted mt-paragraph max-w-prose">
+            A private space for the conversations that matter most.
+          </p>
+          <p
+            aria-label="End-to-end encryption"
+            className="type-caption mt-paragraph inline-flex items-center gap-2 text-muted"
+            title="End-to-end encrypted: only you and the people you message can read your conversations."
+          >
+            <LockKeyhole aria-hidden="true" size={15} strokeWidth={1.8} />
+            Built for E2EE
+          </p>
+          <div className="mt-section flex flex-wrap justify-center gap-3">
+            <Link className={buttonVariants()} to="/sign-in">
+              <LogIn aria-hidden="true" size={17} strokeWidth={1.8} />
+              Log in
+            </Link>
+            <button
+              aria-describedby="sign-up-coming-soon"
+              className={cn(buttonVariants({ variant: "secondary" }))}
+              disabled
+              type="button"
+            >
+              <UserPlus aria-hidden="true" size={17} strokeWidth={1.8} />
+              Sign up
+            </button>
+          </div>
+          <p className="type-caption mt-2 text-muted" id="sign-up-coming-soon">
+            Sign up is coming soon.
+          </p>
+        </div>
       </div>
     </section>
   );

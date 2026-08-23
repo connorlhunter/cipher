@@ -5,7 +5,6 @@ import {
   LogIn,
   MessageSquare,
   Settings2,
-  Sparkles,
 } from "lucide-react";
 import { type JSX, type ReactNode } from "react";
 import { Link, Outlet } from "@tanstack/react-router";
@@ -39,8 +38,8 @@ export function DesktopShell(): JSX.Element {
       </a>
       <header className="app-header border-border bg-surface text-text">
         <div className="flex min-w-0 items-center gap-3" data-tauri-drag-region>
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-accent text-on-accent">
-            <Sparkles aria-hidden="true" size={17} strokeWidth={1.8} />
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-elevated p-1">
+            <img alt="" className="size-full" src="/cipher-mark.svg" />
           </div>
           <div className="min-w-0">
             <p className="type-label truncate">Cipher</p>
@@ -78,7 +77,7 @@ export function DesktopShell(): JSX.Element {
           <div className="mt-3 grid gap-2 px-3">
             <Badge
               aria-label="End-to-end encryption"
-              className="size-7 justify-center border-transparent bg-transparent px-0 text-muted opacity-75"
+              className="size-7 cursor-help justify-center border-transparent bg-transparent px-0 text-muted opacity-75 transition-colors hover:bg-elevated hover:text-text hover:opacity-100 motion-reduce:transition-none"
               role="img"
               title="End-to-end encrypted: only you and the people you message can read your conversations."
               tone="neutral"
