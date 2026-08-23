@@ -1,0 +1,15 @@
+{
+  "accountProvisioning": "AdminCreateUser",
+  "poolId": "us-west-2_abc",
+  "signInAlias": "invited.person@example.com",
+  "temporaryPassword": "Temporary-password1!",
+  "ephemeralByte": 1,
+  "ephemeralLength": 128,
+  "publicA": "b1ce118779e27c1c015d7a226ecae2ea1fcd017049e4f5c6f9908c686d496dce12a1c017a7523d43e2f3a6bb7e75e266bab0471e0720030edb64d8b5aef428356bc72198d41d319cf36eb0c4b4063fb99f90bc3b25b0d1196f84836bc05be0dfe1e6d1e21ba4c77098f6e6119127981395b0f4da67e26f63ecbfb2ded5d9c091c9850c08f0c372e5101df27967250254d6748a75c9be2f59324d31241f950d79224af0d5ff1c169af541b04a063bd0d4f79216a9da1e1874bc041b97ca2d456310f0b29f3644eca4d0e0c21660cbc5774a7319746bf53024a3bbb9c1251002854d1e6fac951d3a160771cdaf681a95e8cd51eb0630c825cd6227f22edefd35b3789df41dfca6cbd4d90e90ec7e38d3cbdf2b5f3534b016267f6a42190690d4225131811c6ea3b8265cff2fc44497887995eb95357747c3db40dab7199af3b9cbaba28a75d800d809421c5da1b0a24ec3120b3738750dcd42a61d1e9d272118ec2e6db632c241ab33558502dc9bbac1f4a34b3243082b89dcc0620a626d83a483",
+  "secretBlock": "9ae77ec7154c14dcc487b47707fee4b4920cb96d8a8c045e4c8df879a7b375524aa736acdec6c9ad4ea606774d00621b",
+  "canonicalUsername": "01234567-89ab-cdef-0123-456789abcdef",
+  "salt": "36ef01c6dde9fe503da333b1acc758ba",
+  "publicB": "36ef01c6dde9fe503da333b1acc758ba",
+  "timestamp": "Mon Feb 10 18:30:12 UTC 2025",
+  "signature": "d2kS+eNdT2bXeOOXMLJZnblecZ6zKbB9cCcsqSG/dQM="
+}
