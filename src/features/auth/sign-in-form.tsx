@@ -70,7 +70,10 @@ export function SignInForm({
         setChallengeRequired(response.state === "challenge_required");
         setResult(response);
       } catch {
-        setResult({ state: "failed", message: "Authentication is temporarily unavailable." });
+        setResult({
+          state: "failed",
+          message: "Cipher couldn't complete sign-in. Check your connection and try again.",
+        });
       } finally {
         form.reset(initialValues);
         setIdentifier("");
@@ -217,7 +220,10 @@ function VerificationForm({
       try {
         onResult(await submit({ flow: "continue_challenge", code: value.code.trim() }));
       } catch {
-        onResult({ state: "failed", message: "Authentication is temporarily unavailable." });
+        onResult({
+          state: "failed",
+          message: "Cipher couldn't verify that code. Check your connection and try again.",
+        });
       } finally {
         form.reset({ code: "" });
       }
