@@ -51,18 +51,48 @@ export interface DesktopDiagnostics {
   wakes: number;
 }
 
-/** The one application-wide appearance preference owned by the native core. */
-export const desktopThemePreferences = ["system", "light", "dark"] as const;
+/** The bounded color schemes supported by the desktop design system. */
+export const desktopThemeSchemes = [
+  "atlas",
+  "paper",
+  "citrine",
+  "harbor",
+  "midnight",
+  "onyx",
+  "rose",
+  "tide",
+  "ember",
+  "quartz",
+] as const;
+
+/** The one application-wide system or explicit-scheme preference owned by native code. */
+export const desktopThemePreferences = ["system", ...desktopThemeSchemes] as const;
 
 /** A concrete appearance resolved by the native window manager. */
 export const resolvedDesktopThemes = ["light", "dark"] as const;
 
+export type DesktopThemeScheme = (typeof desktopThemeSchemes)[number];
 export type DesktopThemePreference = (typeof desktopThemePreferences)[number];
 export type ResolvedDesktopTheme = (typeof resolvedDesktopThemes)[number];
+
+/** Native window classification for every explicit scheme. */
+export const desktopThemeSchemeClassifications = Object.freeze({
+  atlas: "light",
+  paper: "light",
+  citrine: "light",
+  harbor: "dark",
+  midnight: "dark",
+  onyx: "dark",
+  rose: "light",
+  tide: "light",
+  ember: "light",
+  quartz: "light",
+} satisfies Record<DesktopThemeScheme, ResolvedDesktopTheme>);
 
 /** A safe, content-free theme view supplied by the native desktop core. */
 export interface DesktopTheme {
   preference: DesktopThemePreference;
+  scheme: DesktopThemeScheme;
   resolved: ResolvedDesktopTheme;
 }
 
@@ -145,9 +175,19 @@ export function parseDesktopTheme(value: unknown): DesktopTheme {
   const result = z
     .object({
       preference: z.enum(desktopThemePreferences),
+      scheme: z.enum(desktopThemeSchemes),
       resolved: z.enum(resolvedDesktopThemes),
     })
     .strict()
+    .refine(
+      (theme) =>
+        desktopThemeSchemeClassifications[theme.scheme] === theme.resolved &&
+        (theme.preference === "system"
+          ? (theme.resolved === "light" && theme.scheme === "atlas") ||
+            (theme.resolved === "dark" && theme.scheme === "midnight")
+          : theme.preference === theme.scheme),
+      "The desktop core returned a contradictory theme.",
+    )
     .safeParse(value);
 
   if (!result.success) {

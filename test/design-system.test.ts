@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { focusRouteContent } from "../src/app/focus-restoration";
+import { desktopThemeSchemeClassifications, desktopThemeSchemes } from "../src/desktop-contract";
 import { cn } from "../src/lib/utils";
 
 const styles = readFileSync("src/styles.css", "utf8");
@@ -23,6 +24,7 @@ describe("desktop design system", () => {
       "input.tsx",
       "label.tsx",
       "separator.tsx",
+      "select.tsx",
       "visually-hidden.tsx",
     ]) {
       expect(readFileSync(join("src/components/ui", primitive), "utf8")).toContain(
@@ -35,8 +37,8 @@ describe("desktop design system", () => {
     expect(readFileSync("src/lib/utils.ts", "utf8")).toContain("tailwind-merge");
   });
 
-  test("defines complete semantic light and dark token sets", () => {
-    for (const token of [
+  test("defines complete semantic tokens for every light and dark scheme", () => {
+    const tokens = [
       "canvas",
       "surface",
       "elevated",
@@ -46,15 +48,17 @@ describe("desktop design system", () => {
       "focus",
       "accent",
       "destructive",
+      "on-destructive",
       "success",
       "warning",
-    ]) {
-      expect(styles.match(new RegExp(`--cipher-${token}:`, "gu"))?.length).toBeGreaterThanOrEqual(
-        2,
-      );
+    ] as const;
+    for (const scheme of desktopThemeSchemes) {
+      const block = schemeTokenBlock(scheme);
+      for (const token of tokens) {
+        expect(block).toContain(`--cipher-${token}:`);
+      }
+      expect(block).toContain(`color-scheme: ${desktopThemeSchemeClassifications[scheme]}`);
     }
-    expect(styles).toContain(':root[data-theme="light"]');
-    expect(styles).toContain(':root[data-theme="dark"]');
     expect(styles).toContain("forced-colors: active");
     for (const role of [
       "display",
@@ -70,6 +74,23 @@ describe("desktop design system", () => {
       expect(styles).toContain(`.type-${role}`);
     }
     expect(styles).toContain("--cipher-paragraph-spacing:");
+  });
+
+  test("keeps essential text, action, and focus pairs above contrast thresholds", () => {
+    for (const scheme of desktopThemeSchemes) {
+      const block = schemeTokenBlock(scheme);
+      const canvas = tokenColor(block, "canvas");
+      const surface = tokenColor(block, "surface");
+      expect(contrast(tokenColor(block, "text"), canvas)).toBeGreaterThanOrEqual(7);
+      expect(contrast(tokenColor(block, "muted"), canvas)).toBeGreaterThanOrEqual(4.5);
+      expect(
+        contrast(tokenColor(block, "on-accent"), tokenColor(block, "accent")),
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(
+        contrast(tokenColor(block, "on-destructive"), tokenColor(block, "destructive")),
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(tokenColor(block, "focus"), surface)).toBeGreaterThanOrEqual(3);
+    }
   });
 
   test("keeps native resolution, focus, motion, and narrow layout behavior explicit", () => {
@@ -99,3 +120,36 @@ describe("desktop design system", () => {
     expect(cn("type-label text-text", "text-muted")).toBe("type-label text-muted");
   });
 });
+
+function schemeTokenBlock(scheme: string): string {
+  const match = styles.match(new RegExp(`:root\\[data-scheme="${scheme}"\\] \\{([^}]*)\\}`, "u"));
+  if (match?.[1] === undefined) {
+    throw new Error(`Missing scheme block: ${scheme}`);
+  }
+  return match[1];
+}
+
+function tokenColor(block: string, token: string): string {
+  const match = block.match(new RegExp(`--cipher-${token}:\\s*(#[0-9a-f]{6})`, "iu"));
+  if (match?.[1] === undefined) {
+    throw new Error(`Missing color token: ${token}`);
+  }
+  return match[1];
+}
+
+function contrast(first: string, second: string): number {
+  const [lighter, darker] = [luminance(first), luminance(second)].sort(
+    (left, right) => right - left,
+  );
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function luminance(color: string): number {
+  const channels = [1, 3, 5].map(
+    (offset) => Number.parseInt(color.slice(offset, offset + 2), 16) / 255,
+  );
+  const [red = 0, green = 0, blue = 0] = channels.map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}

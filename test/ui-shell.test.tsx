@@ -5,7 +5,10 @@ import { type JSX } from "react";
 import { Card } from "../src/components/ui/card";
 import { Input } from "../src/components/ui/input";
 import { Label } from "../src/components/ui/label";
-import { ThemePreferenceControl } from "../src/features/theme/theme-preference-control";
+import {
+  ThemePreferenceControl,
+  nextThemePreference,
+} from "../src/features/theme/theme-preference-control";
 import {
   ThemeProvider,
   applyDesktopTheme,
@@ -41,53 +44,86 @@ function shell(boundary: NativeThemeBoundary): JSX.Element {
 afterEach(() => {
   cleanup();
   browser.document.documentElement.removeAttribute("data-theme");
+  browser.document.documentElement.removeAttribute("data-scheme");
   browser.document.documentElement.removeAttribute("data-theme-preference");
   browser.document.documentElement.style.colorScheme = "";
 });
 
 describe("theme preference UI", () => {
-  test("announces and applies the light native theme without browser persistence", async () => {
+  test("selects and cycles native schemes without browser persistence", async () => {
     const selected: string[] = [];
     const boundary: NativeThemeBoundary = {
-      current: async () => ({ preference: "system", resolved: "dark" }),
+      current: async () => ({ preference: "system", scheme: "midnight", resolved: "dark" }),
       set: async (preference) => {
         selected.push(preference);
-        return { preference, resolved: preference === "dark" ? "dark" : "light" };
+        return preference === "harbor" || preference === "midnight" || preference === "onyx"
+          ? { preference, scheme: preference, resolved: "dark" }
+          : {
+              preference,
+              scheme: preference === "system" ? "atlas" : preference,
+              resolved: "light",
+            };
       },
       subscribe: async () => () => undefined,
     };
 
     render(shell(boundary));
     const user = userEvent.setup({ document: browser.document as unknown as Document });
-    await user.click(await screen.findByRole("button", { name: "Light appearance" }));
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Color scheme" }), "rose");
 
-    expect(selected).toEqual(["light"]);
+    expect(selected).toEqual(["rose"]);
     expect(browser.document.documentElement.dataset.theme).toBe("light");
-    expect(browser.document.documentElement.dataset.themePreference).toBe("light");
-    expect(
-      screen.getByRole("button", { name: "Light appearance" }).getAttribute("aria-pressed"),
-    ).toBe("true");
+    expect(browser.document.documentElement.dataset.scheme).toBe("rose");
+    expect(browser.document.documentElement.dataset.themePreference).toBe("rose");
     expect(browser.document.querySelector("output")?.textContent).toContain(
-      "light appearance active",
+      "Rose preference active with the Rose light scheme",
     );
+
+    await user.click(screen.getByRole("button", { name: "Use Tide appearance" }));
+    expect(selected).toEqual(["rose", "tide"]);
+    expect(browser.document.documentElement.dataset.scheme).toBe("tide");
+  });
+
+  test("cycles through system and every explicit scheme in a stable order", () => {
+    const visited: string[] = [];
+    let current: Parameters<typeof nextThemePreference>[0] = "system";
+    for (let index = 0; index < 11; index += 1) {
+      current = nextThemePreference(current);
+      visited.push(current);
+    }
+    expect(visited).toEqual([
+      "atlas",
+      "paper",
+      "citrine",
+      "harbor",
+      "midnight",
+      "onyx",
+      "rose",
+      "tide",
+      "ember",
+      "quartz",
+      "system",
+    ]);
   });
 
   test("writes resolved theme attributes only to the current document", () => {
     applyDesktopTheme(browser.document.documentElement as unknown as HTMLElement, {
-      preference: "dark",
+      preference: "onyx",
+      scheme: "onyx",
       resolved: "dark",
     });
 
     expect(browser.document.documentElement.dataset).toMatchObject({
+      scheme: "onyx",
       theme: "dark",
-      themePreference: "dark",
+      themePreference: "onyx",
     });
     expect(browser.document.documentElement.style.colorScheme).toBe("dark");
   });
 
   test("keeps the last safe appearance and announces an unavailable native update", async () => {
     const boundary: NativeThemeBoundary = {
-      current: async () => ({ preference: "system", resolved: "dark" }),
+      current: async () => ({ preference: "system", scheme: "midnight", resolved: "dark" }),
       set: async () => {
         throw new Error("native theme unavailable");
       },
@@ -96,9 +132,13 @@ describe("theme preference UI", () => {
 
     render(shell(boundary));
     const user = userEvent.setup({ document: browser.document as unknown as Document });
-    await user.click(await screen.findByRole("button", { name: "Light appearance" }));
+    await user.selectOptions(
+      await screen.findByRole("combobox", { name: "Color scheme" }),
+      "atlas",
+    );
 
     expect(browser.document.documentElement.dataset.theme).toBe("dark");
+    expect(browser.document.documentElement.dataset.scheme).toBe("midnight");
     expect(browser.document.querySelector("output")?.textContent).toContain(
       "Appearance controls are unavailable",
     );
@@ -137,11 +177,15 @@ describe("theme preference UI", () => {
 describe("desktop shell accessibility", () => {
   test("keeps landmarks, skip navigation, route focus, and controls keyboard reachable", async () => {
     const boundary: NativeThemeBoundary = {
-      current: async () => ({ preference: "system", resolved: "light" }),
-      set: async (preference) => ({
-        preference,
-        resolved: preference === "dark" ? "dark" : "light",
-      }),
+      current: async () => ({ preference: "system", scheme: "atlas", resolved: "light" }),
+      set: async (preference) =>
+        preference === "harbor" || preference === "midnight" || preference === "onyx"
+          ? { preference, scheme: preference, resolved: "dark" }
+          : {
+              preference,
+              scheme: preference === "system" ? "atlas" : preference,
+              resolved: "light",
+            },
       subscribe: async () => () => undefined,
     };
     await router.navigate({ to: "/" });

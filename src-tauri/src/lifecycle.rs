@@ -413,6 +413,25 @@ mod tests {
         assert!(service.diagnostic(Some(1)).is_err());
         assert!(
             service
+                .begin_native_operation(NativeOperationKind::Authentication)
+                .is_err()
+        );
+        assert!(
+            service
+                .finish_native_operation(super::NativeOperation {
+                    id: 1,
+                    cancellation: Default::default(),
+                })
+                .is_err()
+        );
+        let app = managed_mock_app();
+        assert!(
+            service
+                .handle_native_event(app.handle(), DesktopLifecycleEvent::ColdStart)
+                .is_err()
+        );
+        assert!(
+            service
                 .transition(DesktopLifecycleEvent::ColdStart)
                 .is_err()
         );

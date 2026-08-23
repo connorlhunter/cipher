@@ -73,14 +73,15 @@ export function AppearanceRoute(): JSX.Element {
         Appearance
       </h1>
       <p className="type-body-muted mt-paragraph max-w-prose">
-        Choose system, light, or dark. Cipher stores that non-secret preference in native
-        application configuration and applies one resolved appearance to the desktop frame and
-        webview.
+        Choose system appearance or an explicit color scheme. Cipher stores that non-secret
+        preference in native application configuration and applies one resolved appearance to the
+        desktop frame and webview.
       </p>
       <Card className="mt-section p-panel">
         <h2 className="type-section-title">Theme</h2>
         <p className="type-body-muted mt-paragraph">
-          System follows the current operating-system appearance while Cipher is running.
+          System follows the current operating-system appearance; explicit schemes keep their own
+          light or dark native window treatment.
         </p>
         <div className="mt-panel">
           <ThemePreferenceControl />

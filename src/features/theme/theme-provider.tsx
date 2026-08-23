@@ -34,10 +34,15 @@ interface ThemeContextValue {
   pending: boolean;
   preference: DesktopThemePreference;
   resolved: DesktopTheme["resolved"];
+  scheme: DesktopTheme["scheme"];
   select(preference: DesktopThemePreference): Promise<void>;
 }
 
-const fallbackTheme: DesktopTheme = Object.freeze({ preference: "system", resolved: "light" });
+const fallbackTheme: DesktopTheme = Object.freeze({
+  preference: "system",
+  scheme: "atlas",
+  resolved: "light",
+});
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
@@ -48,12 +53,13 @@ export interface ThemeProviderProps {
 
 /** Applies the native-resolved theme to the document without browser preference storage. */
 export function applyDesktopTheme(documentElement: HTMLElement, theme: DesktopTheme): void {
+  documentElement.dataset.scheme = theme.scheme;
   documentElement.dataset.theme = theme.resolved;
   documentElement.dataset.themePreference = theme.preference;
   documentElement.style.colorScheme = theme.resolved;
 }
 
-/** Provides one native-owned system, light, or dark preference to every app surface. */
+/** Provides one native-owned system or explicit color-scheme preference to every app surface. */
 export function ThemeProvider({
   boundary = desktopThemeBoundary,
   children,
@@ -109,6 +115,7 @@ export function ThemeProvider({
       unavailable,
       preference: theme.preference,
       resolved: theme.resolved,
+      scheme: theme.scheme,
       async select(preference: DesktopThemePreference): Promise<void> {
         setPending(true);
         try {

@@ -11,6 +11,7 @@ import {
   type DesktopStatus,
   type DesktopTheme,
   type DesktopThemePreference,
+  type DesktopThemeScheme,
 } from "./desktop-contract";
 import {
   subscribeToRendererPurgeEvents,
@@ -26,6 +27,7 @@ export {
   type DesktopStatus,
   type DesktopTheme,
   type DesktopThemePreference,
+  type DesktopThemeScheme,
 } from "./desktop-contract";
 
 /** Invokes and validates the native desktop-status command. */

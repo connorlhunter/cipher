@@ -1,55 +1,75 @@
-import { Monitor, Moon, Sun } from "lucide-react";
-import { type JSX } from "react";
+import { Monitor, Palette } from "lucide-react";
+import { type JSX, useId } from "react";
 
 import { Button } from "../../components/ui/button";
-import { cn } from "../../lib/utils";
-import { type DesktopThemePreference } from "../../desktop";
+import { Select } from "../../components/ui/select";
+import { desktopThemePreferences, type DesktopThemePreference } from "../../desktop-contract";
 import { useTheme } from "./theme-provider";
 
-const choices: ReadonlyArray<{
-  icon: typeof Monitor;
-  label: string;
-  value: DesktopThemePreference;
-}> = [
-  { icon: Monitor, label: "System", value: "system" },
-  { icon: Sun, label: "Light", value: "light" },
-  { icon: Moon, label: "Dark", value: "dark" },
-];
+const labels = Object.freeze({
+  system: "System",
+  atlas: "Atlas",
+  paper: "Paper",
+  citrine: "Citrine",
+  harbor: "Harbor",
+  midnight: "Midnight",
+  onyx: "Onyx",
+  rose: "Rose",
+  tide: "Tide",
+  ember: "Ember",
+  quartz: "Quartz",
+} satisfies Record<DesktopThemePreference, string>);
 
-/** Chooses the single native-owned appearance preference without WebView persistence. */
+/** Returns the next native preference in the accessible appearance cycle. */
+export function nextThemePreference(preference: DesktopThemePreference): DesktopThemePreference {
+  const index = desktopThemePreferences.indexOf(preference);
+  return desktopThemePreferences[(index + 1) % desktopThemePreferences.length] ?? "system";
+}
+
+/** Selects or cycles the complete native-owned appearance set without WebView persistence. */
 export function ThemePreferenceControl(): JSX.Element {
-  const { pending, preference, resolved, select, unavailable } = useTheme();
+  const selectId = useId();
+  const { pending, preference, resolved, scheme, select, unavailable } = useTheme();
+  const next = nextThemePreference(preference);
 
   return (
     <fieldset className="flex min-w-0 items-center gap-1" disabled={pending}>
       <legend className="sr-only">Appearance</legend>
-      {choices.map(({ icon: Icon, label, value }) => {
-        const selected = preference === value;
-        return (
-          <Button
-            aria-label={`${label} appearance`}
-            aria-pressed={selected}
-            className={cn(
-              "shrink-0",
-              selected && "border border-border bg-elevated text-accent shadow-xs",
-            )}
-            key={value}
-            onClick={() => void select(value)}
-            size="compact"
-            title={`${label} appearance`}
-            variant="ghost"
-          >
-            <Icon aria-hidden="true" size={16} strokeWidth={1.8} />
-            <span className="hidden xl:inline">{label}</span>
-          </Button>
-        );
-      })}
+      <label className="sr-only" htmlFor={selectId}>
+        Color scheme
+      </label>
+      <Select
+        aria-label="Color scheme"
+        className="max-w-28 sm:max-w-36"
+        id={selectId}
+        onChange={(event) => void select(event.currentTarget.value as DesktopThemePreference)}
+        value={preference}
+      >
+        {desktopThemePreferences.map((value) => (
+          <option key={value} value={value}>
+            {value === "system" ? "System (automatic)" : labels[value]}
+          </option>
+        ))}
+      </Select>
+      <Button
+        aria-label={`Use ${labels[next]} appearance`}
+        onClick={() => void select(next)}
+        size="compact"
+        title={`Use ${labels[next]} appearance`}
+        variant="ghost"
+      >
+        {next === "system" ? (
+          <Monitor aria-hidden="true" size={16} strokeWidth={1.8} />
+        ) : (
+          <Palette aria-hidden="true" size={16} strokeWidth={1.8} />
+        )}
+      </Button>
       <output aria-live="polite" className="sr-only">
         {pending
           ? "Updating appearance"
           : unavailable
             ? "Appearance controls are unavailable"
-            : `${resolved} appearance active`}
+            : `${labels[preference]} preference active with the ${labels[scheme]} ${resolved} scheme`}
       </output>
     </fieldset>
   );

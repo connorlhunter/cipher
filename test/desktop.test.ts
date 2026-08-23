@@ -13,6 +13,8 @@ import {
 } from "../src/desktop";
 import {
   desktopCommands,
+  desktopThemeSchemeClassifications,
+  desktopThemeSchemes,
   desktopThemeChangedEvent,
   desktopProtocol,
   maxDesktopStatusMessageLength,
@@ -121,7 +123,7 @@ describe("parseDesktopDiagnostics", () => {
 });
 
 describe("desktop theme boundary", () => {
-  const theme = { preference: "system", resolved: "dark" } as const;
+  const theme = { preference: "system", scheme: "midnight", resolved: "dark" } as const;
 
   test("accepts only the native-owned preference and resolved appearance", async () => {
     expect(parseDesktopTheme(theme)).toEqual(theme);
@@ -146,11 +148,30 @@ describe("desktop theme boundary", () => {
   test.each([
     null,
     {},
-    { preference: "browser", resolved: "dark" },
-    { preference: "system", resolved: "auto" },
-    { preference: "system", resolved: "dark", token: "forbidden" },
+    { preference: "browser", scheme: "midnight", resolved: "dark" },
+    { preference: "system", scheme: "atlas", resolved: "auto" },
+    { preference: "system", scheme: "harbor", resolved: "dark" },
+    { preference: "rose", scheme: "rose", resolved: "dark" },
+    { preference: "onyx", scheme: "midnight", resolved: "dark" },
+    { preference: "system", scheme: "midnight", resolved: "dark", token: "forbidden" },
   ])("rejects an unsafe native theme view: %p", (value) => {
     expect(() => parseDesktopTheme(value)).toThrow("invalid theme");
+  });
+
+  test("accepts every explicit scheme only with its native classification", () => {
+    for (const scheme of desktopThemeSchemes) {
+      expect(
+        parseDesktopTheme({
+          preference: scheme,
+          scheme,
+          resolved: desktopThemeSchemeClassifications[scheme],
+        }),
+      ).toEqual({
+        preference: scheme,
+        scheme,
+        resolved: desktopThemeSchemeClassifications[scheme],
+      });
+    }
   });
 
   test("sends one bounded preference to the native command", async () => {
@@ -158,12 +179,12 @@ describe("desktop theme boundary", () => {
       setDesktopThemeWith(async (command, arguments_) => {
         expect(command).toBe(desktopCommands.setTheme);
         expect(arguments_).toEqual({
-          preference: "light",
+          preference: "rose",
           protocolVersion: desktopProtocol.current,
         });
-        return { preference: "light", resolved: "light" };
-      }, "light"),
-    ).resolves.toEqual({ preference: "light", resolved: "light" });
+        return { preference: "rose", scheme: "rose", resolved: "light" };
+      }, "rose"),
+    ).resolves.toEqual({ preference: "rose", scheme: "rose", resolved: "light" });
   });
 
   test("keeps native theme notifications content-free and injectable", async () => {

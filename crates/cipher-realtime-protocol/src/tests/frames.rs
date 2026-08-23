@@ -72,7 +72,7 @@ fn valid_golden_frames_round_trip_and_advance_a_connection() {
     let fixture = fixture(VALID_FIXTURE);
     let client_frames = fixture["clientFrames"].as_array().unwrap();
     let server_frames = fixture["serverFrames"].as_array().unwrap();
-    let mut session = RealtimeSession::v1();
+    let mut session = RealtimeSession::default();
 
     for frame in client_frames {
         let decoded = decode_client_frame(&wire(frame)).unwrap();
