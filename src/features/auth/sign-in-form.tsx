@@ -64,6 +64,7 @@ export function SignInForm({
         setResult({ state: "failed", message: "Authentication is temporarily unavailable." });
       } finally {
         form.reset(initialValues);
+        setIdentifier("");
       }
     },
   });
@@ -148,10 +149,14 @@ export function SignInForm({
               </div>
             )}
           </form.Field>
-          <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting] as const}>
-            {([canSubmit, isSubmitting]) => (
+          <form.Subscribe
+            selector={(state) =>
+              [state.canSubmit, state.isSubmitting, state.values.password] as const
+            }
+          >
+            {([canSubmit, isSubmitting, password]) => (
               <Button
-                disabled={!canSubmit || isSubmitting || identifierStatus !== "ready"}
+                disabled={!canSubmit || isSubmitting || !password || identifierStatus !== "ready"}
                 type="submit"
               >
                 {isSubmitting ? <LoadingLabel label="Signing in…" /> : "Sign in"}

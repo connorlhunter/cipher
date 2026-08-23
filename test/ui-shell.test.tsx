@@ -243,6 +243,10 @@ describe("desktop shell accessibility", () => {
     expect(screen.getByText("Looks good.")).toBeDefined();
     expect((password as HTMLInputElement).disabled).toBe(false);
     expect((screen.getByRole("button", { name: "Sign in" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    await user.type(password, "Strong-password1!");
+    expect((screen.getByRole("button", { name: "Sign in" }) as HTMLButtonElement).disabled).toBe(
       false,
     );
   });
