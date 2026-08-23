@@ -1,8 +1,12 @@
 /** Runs Tauri with Cipher's isolated build output and platform bundle default. */
+import { resolve } from "node:path";
+
 const args = process.argv.slice(2);
 const environment = {
   ...process.env,
-  CARGO_TARGET_DIR: "target/tauri",
+  // Tauri invokes Cargo from `src-tauri`; use an absolute path so Cargo keeps
+  // one cache instead of rebasing a relative target directory per invocation.
+  CARGO_TARGET_DIR: resolve(process.cwd(), "target", "tauri"),
   // Avoid macOS proc-macro linker corruption on fresh release builds.
   ...(process.platform === "darwin" ? { CARGO_BUILD_JOBS: "1" } : {}),
 };
