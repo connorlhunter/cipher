@@ -101,7 +101,7 @@ export function SignInForm({
       </div>
       <Badge
         aria-label="End-to-end encryption"
-        title="End-to-end encryption is planned: only you and the people you message will be able to read your conversations. Cipher will generate an encryption key on your device, keep it there, and delete it when local app data is removed during uninstall."
+        title="End-to-end encrypted: only you and the people you message can read your conversations. Your account uses an encryption key generated and securely stored on your device to encrypt your data. The key never leaves your device and is deleted when you uninstall the app. Your data is also deleted when you delete your account. Not even Cipher staff can access or read your encrypted conversations."
         tone="neutral"
       >
         <LockKeyhole aria-hidden="true" className="mr-1" size={13} strokeWidth={1.8} />

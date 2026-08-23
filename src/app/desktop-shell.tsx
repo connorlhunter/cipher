@@ -79,7 +79,7 @@ export function DesktopShell(): JSX.Element {
               aria-label="End-to-end encryption"
               className="size-7 cursor-help justify-center border-transparent bg-transparent px-0 text-muted opacity-75 transition-colors hover:bg-elevated hover:text-text hover:opacity-100 motion-reduce:transition-none"
               role="img"
-              title="End-to-end encryption is planned: only you and the people you message will be able to read your conversations. Cipher will generate an encryption key on your device, keep it there, and delete it when local app data is removed during uninstall."
+              title="End-to-end encrypted: only you and the people you message can read your conversations. Your account uses an encryption key generated and securely stored on your device to encrypt your data. The key never leaves your device and is deleted when you uninstall the app. Your data is also deleted when you delete your account. Not even Cipher staff can access or read your encrypted conversations."
               tone="neutral"
             >
               <LockKeyhole aria-hidden="true" size={15} strokeWidth={1.8} />
