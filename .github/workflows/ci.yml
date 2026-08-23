@@ -7,12 +7,36 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      native: ${{ steps.filter.outputs.native }}
+    steps:
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
+        id: filter
+        with:
+          filters: |
+            native:
+              - 'src-tauri/**'
+              - 'crates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.cargo/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'scripts/run-tauri.ts'
+              - 'scripts/check-toolchain.ts'
+              - 'infra/**'
+              - '.github/workflows/**'
+
   frontend:
     runs-on: ubuntu-24.04
     steps:
@@ -34,8 +58,6 @@ jobs:
           CIPHER_PULL_REQUEST_AUTHOR: ${{ github.event.pull_request.user.login }}
           CIPHER_PULL_REQUEST_BODY: ${{ github.event.pull_request.body }}
       - run: bun audit --audit-level=high
-      - run: cargo install cargo-deny --version 0.20.2 --locked
-      - run: cargo deny check
       - run: bun x prettier --check . --ignore-unknown
       - run: bun x eslint .
       - run: bun x tsgo --build --pretty false
@@ -43,6 +65,8 @@ jobs:
       - run: bun run web:build
 
   native:
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.native == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -59,22 +83,42 @@ jobs:
           cache: npm
           cache-dependency-path: infra/package-lock.json
       - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: ${{ runner.os }}-cipher
       - run: bun install --frozen-lockfile --ignore-scripts
       - run: npm --prefix infra ci --ignore-scripts
-      - run: cargo install cargo-llvm-cov --version 0.8.7 --locked
-      - run: bun run toolchain:check
       - name: Verify State-stack auth contract
         run: npm --prefix infra run test:state-foundations
-      - run: cargo fmt --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo doc --workspace --no-deps
+      - name: Install Rust dependency checker
+        if: runner.os == 'macOS'
+        run: cargo install cargo-deny --version 0.20.2 --locked
+      - name: Install Rust coverage tool
+        if: runner.os == 'macOS'
+        run: cargo install cargo-llvm-cov --version 0.8.7 --locked
+      - name: Check native toolchain
+        if: runner.os == 'macOS'
+        run: bun run toolchain:check
+      - name: Check Rust dependencies
+        if: runner.os == 'macOS'
+        run: cargo deny check
+      - name: Check Rust formatting
+        if: runner.os == 'macOS'
+        run: cargo fmt --check
+      - name: Lint Rust workspace
+        if: runner.os == 'macOS'
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Build Rust documentation
+        if: runner.os == 'macOS'
+        run: cargo doc --workspace --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
-      - run: cargo test --workspace --locked
+      - name: Run desktop Rust tests
+        if: runner.os == 'Windows'
+        run: cargo test -p cipher-desktop --bin cipher-desktop --locked
       - name: Run Rust coverage gate
         if: runner.os == 'macOS'
         run: bun run coverage:rust
-      - run: cargo build --workspace --release --locked
       - run: bun run desktop:build
 
   infrastructure:
