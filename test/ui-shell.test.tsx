@@ -5,6 +5,7 @@ import { type JSX } from "react";
 import { Card } from "../src/components/ui/card";
 import { Input } from "../src/components/ui/input";
 import { Label } from "../src/components/ui/label";
+import type { DesktopAuthenticationRequest } from "../src/desktop";
 import {
   ThemePreferenceControl,
   nextThemePreference,
