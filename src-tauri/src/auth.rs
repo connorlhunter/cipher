@@ -49,16 +49,20 @@ const PASSWORD_VERIFIER_PARAMETERS: &[&str] = &[
     "USER_ID_FOR_SRP",
 ];
 const NEW_PASSWORD_REQUIRED_PARAMETERS: &[&str] = &["requiredAttributes", "userAttributes"];
-const SOFTWARE_TOKEN_MFA_PARAMETERS: &[&str] =
-    &["FRIENDLY_DEVICE_NAME", "USER_CODE_DELIVERY_SECONDS"];
+const SOFTWARE_TOKEN_MFA_PARAMETERS: &[&str] = &[
+    "FRIENDLY_DEVICE_NAME",
+    "USER_CODE_DELIVERY_SECONDS",
+    "USERNAME",
+];
 const MFA_SETUP_PARAMETERS: &[&str] = &["MFAS_CAN_SETUP"];
 const EMAIL_CODE_PARAMETERS: &[&str] = &[
     "CODE_DELIVERY_ATTRIBUTE",
     "CODE_DELIVERY_DELIVERY_MEDIUM",
     "CODE_DELIVERY_DESTINATION",
+    "USERNAME",
 ];
 
-/// The two credential submissions implemented by the native SRP flow.
+/// The bounded submissions accepted by the native Cognito flow.
 #[derive(Deserialize)]
 #[serde(tag = "flow", rename_all = "snake_case")]
 pub enum AuthenticationRequest {
@@ -77,6 +81,11 @@ pub enum AuthenticationRequest {
         temporary_password: SecretText,
         /// Permanent password selected during redemption.
         new_password: SecretText,
+    },
+    /// Completes a native-held email or authenticator-app verification challenge.
+    ContinueChallenge {
+        /// One-time verification value. It is never retained by the webview.
+        code: SecretText,
     },
 }
 
@@ -99,6 +108,7 @@ impl AuthenticationRequest {
                 validate_credential(temporary_password.as_str())?;
                 validate_new_password(new_password.as_str())
             }
+            Self::ContinueChallenge { code } => validate_one_time_code(code.as_str()),
         }
     }
 
@@ -113,6 +123,9 @@ impl AuthenticationRequest {
                 temporary_password,
                 ..
             } => (identifier.as_str(), temporary_password.as_str()),
+            Self::ContinueChallenge { .. } => {
+                unreachable!("challenge continuations do not start SRP")
+            }
         }
     }
 }
@@ -502,7 +515,44 @@ impl NativeCognitoAuthenticator {
                 }
                 finish_authenticated_or_challenge(final_step)
             }
+            AuthenticationRequest::ContinueChallenge { .. } => {
+                Err(NativeAuthError::new(NativeAuthErrorCode::InvalidRequest))
+            }
         }
+    }
+
+    /// Completes one native-held verification continuation without exposing its
+    /// Cognito session or challenge parameters to the renderer.
+    pub async fn continue_challenge(
+        &self,
+        challenge: &CognitoChallengeStep,
+        code: &SecretText,
+        cancellation: &OperationCancellation,
+    ) -> Result<NativeAuthOutcome, NativeAuthError> {
+        ensure_not_cancelled(cancellation)?;
+        self.limiter.record(self.clock.monotonic_now())?;
+        validate_one_time_code(code.as_str())?;
+
+        let parameter_name = match challenge.kind() {
+            CognitoChallengeKind::SoftwareTokenMfa => "SOFTWARE_TOKEN_MFA_CODE",
+            CognitoChallengeKind::EmailCode => "EMAIL_OTP_CODE",
+            _ => return Err(NativeAuthError::new(NativeAuthErrorCode::InvalidRequest)),
+        };
+        let username = challenge
+            .parameters()
+            .get("USERNAME")
+            .ok_or_else(|| NativeAuthError::new(NativeAuthErrorCode::InvalidResponse))?;
+        let response = HashMap::from([
+            ("USERNAME".to_owned(), username.to_owned()),
+            (parameter_name.to_owned(), code.as_str().to_owned()),
+        ]);
+        ensure_not_cancelled(cancellation)?;
+        let final_step = self
+            .provider
+            .respond(challenge.kind(), response, challenge.session())
+            .await?;
+        ensure_not_cancelled(cancellation)?;
+        finish_authenticated_or_challenge(final_step)
     }
 }
 
@@ -823,6 +873,14 @@ fn validate_new_password(password: &str) -> Result<(), NativeAuthError> {
     }
 }
 
+fn validate_one_time_code(value: &str) -> Result<(), NativeAuthError> {
+    if value.len() == 6 && value.bytes().all(|byte| byte.is_ascii_digit()) {
+        Ok(())
+    } else {
+        Err(NativeAuthError::new(NativeAuthErrorCode::InvalidRequest))
+    }
+}
+
 fn valid_token(value: &str, maximum: usize) -> bool {
     !value.is_empty()
         && value.len() <= maximum
@@ -994,7 +1052,9 @@ mod tests {
                     r#"{"email":"person@example.com","email_verified":"true"}"#.into(),
                 ),
             ]),
-            CognitoChallengeKind::SoftwareTokenMfa => HashMap::new(),
+            CognitoChallengeKind::SoftwareTokenMfa => {
+                HashMap::from([("USERNAME".into(), "canonical-user".into())])
+            }
             CognitoChallengeKind::MfaSetup => {
                 HashMap::from([("MFAS_CAN_SETUP".into(), r#"["SOFTWARE_TOKEN_MFA"]"#.into())])
             }
@@ -1004,6 +1064,7 @@ mod tests {
                     "CODE_DELIVERY_DESTINATION".into(),
                     "p***@example.com".into(),
                 ),
+                ("USERNAME".into(), "canonical-user".into()),
             ]),
             CognitoChallengeKind::Unsupported => HashMap::new(),
         };
@@ -1388,6 +1449,36 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn native_verification_continuation_keeps_the_cognito_session_out_of_the_response() {
+        let provider = Arc::new(ScriptedProvider::new(vec![tokens()]));
+        let authenticator = NativeCognitoAuthenticator::with_clock(
+            POOL_ID,
+            provider.clone(),
+            Arc::new(FixedClock::new()),
+        )
+        .unwrap();
+        let pending = match challenge(CognitoChallengeKind::SoftwareTokenMfa) {
+            CognitoAuthStep::Challenge(challenge) => challenge,
+            CognitoAuthStep::Authenticated(_) => unreachable!(),
+        };
+        let outcome = authenticator
+            .continue_challenge(
+                &pending,
+                &SecretText::new("123456"),
+                &OperationCancellation::default(),
+            )
+            .await
+            .unwrap();
+        assert!(matches!(&outcome, NativeAuthOutcome::Authenticated(_)));
+        let calls = provider.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, CognitoChallengeKind::SoftwareTokenMfa);
+        assert_eq!(calls[0].1["USERNAME"], "canonical-user");
+        assert_eq!(calls[0].1["SOFTWARE_TOKEN_MFA_CODE"], "123456");
+        assert!(!format!("{outcome:?}").contains("opaque-session"));
+    }
+
     #[test]
     fn request_validation_and_debug_never_echo_credentials() {
         for request in [
@@ -1399,6 +1490,9 @@ mod tests {
                 identifier: SecretText::new(EMAIL),
                 temporary_password: SecretText::new("Temporary1!"),
                 new_password: SecretText::new("weak"),
+            },
+            AuthenticationRequest::ContinueChallenge {
+                code: SecretText::new("not-a-code"),
             },
         ] {
             assert!(request.validate().is_err());

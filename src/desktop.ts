@@ -37,6 +37,7 @@ export {
 /** One-time credentials accepted only by the native authentication command. */
 export type DesktopAuthenticationRequest =
   | { flow: "sign_in"; identifier: string; password: string }
+  | { flow: "continue_challenge"; code: string }
   | {
       flow: "accept_administrator_invitation";
       identifier: string;
