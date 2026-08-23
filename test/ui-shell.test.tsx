@@ -27,11 +27,14 @@ Object.assign(globalThis, {
   window: browser,
 });
 
-const { cleanup, render, screen } = await import("@testing-library/react");
+const { act, cleanup, render, screen } = await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
+const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
 const { RouterProvider } = await import("@tanstack/react-router");
 const { router } = await import("../src/routes");
 const { RouteFocusFrame } = await import("../src/app/focus-restoration");
+const { SignInForm } = await import("../src/features/auth/sign-in-form");
+const { AppearanceRoute, OverviewRoute } = await import("../src/routes");
 
 function shell(boundary: NativeThemeBoundary): JSX.Element {
   return (
@@ -210,5 +213,125 @@ describe("desktop shell accessibility", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Appearance" })).toBeDefined();
     expect(browser.document.activeElement?.id).toBe("main-content");
     expect(screen.getAllByRole("group", { name: "Appearance" })).toHaveLength(2);
+  });
+
+  test("centers sign-in around a debounced identifier check before enabling the password field", async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <SignInForm />
+      </QueryClientProvider>,
+    );
+
+    const user = userEvent.setup({ document: browser.document as unknown as Document });
+    const identifier = screen.getByLabelText("Email or username");
+    const password = screen.getByLabelText("Password");
+    expect((password as HTMLInputElement).disabled).toBe(true);
+
+    await user.type(identifier, "not valid");
+    await act(async () => {
+      await Bun.sleep(400);
+    });
+    expect(screen.getByText("Enter a valid email or username.")).toBeDefined();
+    expect((password as HTMLInputElement).disabled).toBe(true);
+
+    await user.clear(identifier);
+    await user.type(identifier, "cipher.user");
+    expect(screen.getByText("Checking…")).toBeDefined();
+    await act(async () => {
+      await Bun.sleep(400);
+    });
+    expect(screen.getByText("Looks good.")).toBeDefined();
+    expect((password as HTMLInputElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Sign in" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
+  test("keeps credentials transient while showing loading, failure, and verification states", async () => {
+    const requests: Array<Record<string, string>> = [];
+    let resolveSignIn: ((value: { state: "failed"; message: string }) => void) | undefined;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <SignInForm
+          authenticate={async (request) => {
+            requests.push(request);
+            if (request.flow === "sign_in") {
+              return new Promise((resolve) => {
+                resolveSignIn = resolve;
+              });
+            }
+            return { state: "authenticated", message: "Signed in securely." };
+          }}
+        />
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup({ document: browser.document as unknown as Document });
+    const identifier = screen.getByLabelText("Email or username");
+    await user.type(identifier, "cipher.user");
+    await act(async () => {
+      await Bun.sleep(400);
+    });
+    await user.type(screen.getByLabelText("Password"), "Strong-password1!");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(screen.getByRole("button", { name: "Signing in…" })).toBeDefined();
+    await act(async () => resolveSignIn?.({ state: "failed", message: "Try again." }));
+    expect(screen.getByRole("alert").textContent).toContain("Try again.");
+    expect((identifier as HTMLInputElement).value).toBe("");
+    expect(requests[0]).toEqual({
+      flow: "sign_in",
+      identifier: "cipher.user",
+      password: "Strong-password1!",
+    });
+  });
+
+  test("moves from sign-in to a one-time verification form and clears each submission", async () => {
+    const requests: Array<Record<string, string>> = [];
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <SignInForm
+          authenticate={async (request) => {
+            requests.push(request);
+            return request.flow === "sign_in"
+              ? { state: "challenge_required", message: "Enter the verification code to continue." }
+              : { state: "authenticated", message: "Signed in securely." };
+          }}
+        />
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup({ document: browser.document as unknown as Document });
+    await user.type(screen.getByLabelText("Email or username"), "cipher.user");
+    await act(async () => {
+      await Bun.sleep(400);
+    });
+    await user.type(screen.getByLabelText("Password"), "Strong-password1!");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    const code = await screen.findByLabelText("Verification code");
+    await user.type(code, "123456");
+    await user.click(screen.getByRole("button", { name: "Verify" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("status").textContent).toContain("Signed in securely.");
+    expect(screen.queryByLabelText("Verification code")).toBeNull();
+    expect(requests.map((request) => request.flow)).toEqual(["sign_in", "continue_challenge"]);
+  });
+
+  test("keeps overview and appearance copy short and centered on the project", () => {
+    render(<OverviewRoute />);
+    expect(screen.getByRole("img", { name: "Cipher" })).toBeDefined();
+    expect(screen.getByText("Private, secure messaging for the people you trust.")).toBeDefined();
+    cleanup();
+    render(
+      <ThemeProvider
+        boundary={{
+          current: async () => ({ preference: "system", scheme: "atlas", resolved: "light" }),
+          set: async () => ({ preference: "system", scheme: "atlas", resolved: "light" }),
+          subscribe: async () => () => undefined,
+        }}
+      >
+        <AppearanceRoute />
+      </ThemeProvider>,
+    );
+    expect(screen.getByText("Choose the look that feels right for you.")).toBeDefined();
   });
 });

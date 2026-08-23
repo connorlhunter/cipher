@@ -31,7 +31,11 @@ const verificationValues = z.object({
 type IdentifierStatus = "idle" | "checking" | "ready" | "invalid";
 
 /** A one-time form that submits credentials directly to the native authentication boundary. */
-export function SignInForm(): JSX.Element {
+export function SignInForm({
+  authenticate = desktopAuthenticate,
+}: {
+  authenticate?: (request: DesktopAuthenticationRequest) => Promise<DesktopAuthenticationView>;
+} = {}): JSX.Element {
   const identifierId = useId();
   const passwordId = useId();
   const verificationId = useId();
@@ -40,7 +44,7 @@ export function SignInForm(): JSX.Element {
   const [identifier, setIdentifier] = useState("");
   const [identifierStatus, setIdentifierStatus] = useState<IdentifierStatus>("idle");
   const mutation = useMutation({
-    mutationFn: (request: DesktopAuthenticationRequest) => desktopAuthenticate(request),
+    mutationFn: (request: DesktopAuthenticationRequest) => authenticate(request),
     retry: false,
   });
   const form = useForm({
