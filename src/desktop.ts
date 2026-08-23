@@ -4,10 +4,12 @@ import {
   desktopCommands,
   desktopThemeChangedEvent,
   desktopProtocol,
+  parseDesktopAuthenticationView,
   parseDesktopDiagnostics,
   parseDesktopStatus,
   parseDesktopTheme,
   type DesktopDiagnostics,
+  type DesktopAuthenticationView,
   type DesktopStatus,
   type DesktopTheme,
   type DesktopThemePreference,
@@ -21,14 +23,49 @@ import {
 
 export {
   parseDesktopDiagnostics,
+  parseDesktopAuthenticationView,
   parseDesktopStatus,
   parseDesktopTheme,
   type DesktopDiagnostics,
+  type DesktopAuthenticationView,
   type DesktopStatus,
   type DesktopTheme,
   type DesktopThemePreference,
   type DesktopThemeScheme,
 } from "./desktop-contract";
+
+/** One-time credentials accepted only by the native authentication command. */
+export type DesktopAuthenticationRequest =
+  | { flow: "sign_in"; identifier: string; password: string }
+  | {
+      flow: "accept_administrator_invitation";
+      identifier: string;
+      temporaryPassword: string;
+      newPassword: string;
+    };
+
+/** Invokes the one-time native credential boundary and accepts only a safe response view. */
+export async function desktopAuthenticateWith(
+  invokeCommand: (command: string, arguments_: Record<string, unknown>) => Promise<unknown>,
+  request: DesktopAuthenticationRequest,
+): Promise<DesktopAuthenticationView> {
+  return parseDesktopAuthenticationView(
+    await invokeCommand(desktopCommands.authenticate, {
+      request,
+      protocolVersion: desktopProtocol.current,
+    }),
+  );
+}
+
+/** Submits credentials directly to native handling without persisting them in the webview. */
+export async function desktopAuthenticate(
+  request: DesktopAuthenticationRequest,
+): Promise<DesktopAuthenticationView> {
+  return desktopAuthenticateWith(
+    (command, arguments_) => invoke<unknown>(command, arguments_),
+    request,
+  );
+}
 
 /** Invokes and validates the native desktop-status command. */
 export async function desktopStatusWith(

@@ -16,14 +16,27 @@ custom-protocol = ["tauri/custom-protocol"]
 tauri-build = { version = "^2.6.3", features = [] }
 
 [dependencies]
+async-trait = "^0.1.89"
+aws-sdk-cognitoidentityprovider = { version = "^1.129.0", default-features = false, features = [
+  "default-https-client",
+  "rt-tokio",
+] }
+base64 = "^0.22.1"
+chrono = { version = "^0.4.44", default-features = false, features = ["clock"] }
 cipher-desktop-lifecycle = { path = "../crates/cipher-desktop-lifecycle", version = "^0.1.0-prealpha.8" }
 cipher-types = { path = "../crates/cipher-types", version = "^0.1.0-prealpha.8" }
 cipher-native-transport = { path = "../crates/cipher-native-transport", version = "^0.1.0-prealpha.8" }
+crypto-bigint = { version = "^0.7.5", features = ["zeroize"] }
+hex = "^0.4.3"
+hmac = "^0.13.0"
 jsonwebtoken = { version = "^10.4.0", default-features = false, features = ["aws_lc_rs"] }
 keyring-core = "^1.0.0"
 serde.workspace = true
 serde_json.workspace = true
+reqwest = { version = "^0.12.28", default-features = false, features = ["blocking", "rustls-tls-native-roots"] }
 sha2 = "^0.10.9"
+sha2-next = { package = "sha2", version = "^0.11.0" }
+srp = { version = "=0.7.0-rc.3" }
 tauri = { version = "^2.11.5", features = [] }
 tempfile = "^3.25.0"
 zeroize = "^1.8.2"
@@ -39,3 +52,4 @@ tauri-plugin-single-instance = "^2.4.3"
 
 [dev-dependencies]
 tauri = { version = "^2.11.5", features = ["test"] }
+tokio.workspace = true

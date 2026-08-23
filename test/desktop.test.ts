@@ -2,11 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import {
+  desktopAuthenticateWith,
   desktopDiagnosticsWith,
   desktopStatusWith,
   desktopThemeWith,
   listenForDesktopThemeChangesWith,
   parseDesktopDiagnostics,
+  parseDesktopAuthenticationView,
   parseDesktopStatus,
   parseDesktopTheme,
   setDesktopThemeWith,
@@ -74,6 +76,35 @@ describe("parseDesktopStatus", () => {
       expect(fixture.command).toBe(desktopCommands.status);
       expect(parseDesktopStatus(fixture.response)).toEqual({ message: "Desktop core is ready." });
     }
+  });
+});
+
+describe("desktop authentication boundary", () => {
+  test("accepts only the bounded native authentication result", async () => {
+    await expect(
+      desktopAuthenticateWith(
+        async (command, arguments_) => {
+          expect(command).toBe(desktopCommands.authenticate);
+          expect(arguments_).toEqual({
+            request: { flow: "sign_in", identifier: "person@example.test", password: "passphrase" },
+            protocolVersion: desktopProtocol.current,
+          });
+          return { state: "authenticated", message: "Signed in securely." };
+        },
+        { flow: "sign_in", identifier: "person@example.test", password: "passphrase" },
+      ),
+    ).resolves.toEqual({ state: "authenticated", message: "Signed in securely." });
+  });
+
+  test.each([
+    null,
+    {},
+    { state: "authenticated" },
+    { state: "unknown", message: "Signed in securely." },
+    { state: "failed", message: "x".repeat(maxDesktopStatusMessageLength + 1) },
+    { state: "failed", message: "Unavailable", token: "forbidden" },
+  ])("rejects unsafe authentication output: %p", (value) => {
+    expect(() => parseDesktopAuthenticationView(value)).toThrow("invalid authentication result");
   });
 });
 

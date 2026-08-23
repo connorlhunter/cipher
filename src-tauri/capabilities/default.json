@@ -9,6 +9,7 @@
     "allow-desktop-status",
     "allow-desktop-diagnostics",
     "allow-desktop-theme",
-    "allow-desktop-set-theme"
+    "allow-desktop-set-theme",
+    "allow-desktop-authenticate"
   ]
 }

@@ -186,6 +186,7 @@ pub trait SessionRefresher: Send + Sync {
     /// Refreshes a session and may return a replacement for the stored refresh material.
     fn refresh(
         &self,
+        supported_session: &SupportedSession,
         refresh_material: &SecretBytes,
         cancellation: &OperationCancellation,
     ) -> Result<SessionRefresh, NativeTransportError>;
@@ -666,7 +667,10 @@ where
     ) -> Result<SessionRefresh, NativeSessionError> {
         for attempt in 0..MAX_REFRESH_ATTEMPTS {
             ensure_not_cancelled(cancellation)?;
-            match self.refresher.refresh(refresh_material, cancellation) {
+            match self
+                .refresher
+                .refresh(&self.supported_session, refresh_material, cancellation)
+            {
                 Ok(refresh) => {
                     ensure_not_cancelled(cancellation)?;
                     return Ok(refresh);
@@ -788,6 +792,7 @@ impl DesktopSessionRefresher {
 impl SessionRefresher for DesktopSessionRefresher {
     fn refresh(
         &self,
+        supported_session: &SupportedSession,
         refresh_material: &SecretBytes,
         cancellation: &OperationCancellation,
     ) -> Result<SessionRefresh, NativeTransportError> {
@@ -797,7 +802,7 @@ impl SessionRefresher for DesktopSessionRefresher {
             .map_err(|_| NativeTransportError::new(NativeTransportErrorCode::Unavailable))?
             .clone()
             .ok_or_else(|| NativeTransportError::new(NativeTransportErrorCode::Unavailable))?;
-        refresher.refresh(refresh_material, cancellation)
+        refresher.refresh(supported_session, refresh_material, cancellation)
     }
 }
 
@@ -1469,6 +1474,7 @@ mod tests {
     impl SessionRefresher for SequenceRefresher {
         fn refresh(
             &self,
+            _: &SupportedSession,
             refresh_material: &SecretBytes,
             _: &OperationCancellation,
         ) -> Result<SessionRefresh, NativeTransportError> {
@@ -1550,6 +1556,7 @@ mod tests {
     impl SessionRefresher for BlockingRefresher {
         fn refresh(
             &self,
+            _: &SupportedSession,
             _: &SecretBytes,
             _: &OperationCancellation,
         ) -> Result<SessionRefresh, NativeTransportError> {
@@ -1586,6 +1593,7 @@ mod tests {
     impl SessionRefresher for CancellingRefresher {
         fn refresh(
             &self,
+            _: &SupportedSession,
             _: &SecretBytes,
             cancellation: &OperationCancellation,
         ) -> Result<SessionRefresh, NativeTransportError> {

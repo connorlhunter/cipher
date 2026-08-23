@@ -1,4 +1,11 @@
-import { CircleHelp, LayoutPanelTop, MessageSquare, Settings2, Sparkles } from "lucide-react";
+import {
+  CircleHelp,
+  KeyRound,
+  LayoutPanelTop,
+  MessageSquare,
+  Settings2,
+  Sparkles,
+} from "lucide-react";
 import { type JSX, type ReactNode } from "react";
 import { Link, Outlet } from "@tanstack/react-router";
 
@@ -10,6 +17,7 @@ import { focusRouteContent, RouteFocusRestoration } from "./focus-restoration";
 
 const navigation = [
   { icon: LayoutPanelTop, label: "Overview", to: "/" },
+  { icon: KeyRound, label: "Sign in", to: "/sign-in" },
   { icon: Settings2, label: "Appearance", to: "/settings/appearance" },
 ] as const;
 
