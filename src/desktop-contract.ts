@@ -30,7 +30,12 @@ export interface DesktopStatus {
 
 /** A bounded result of one native-owned authentication submission. */
 export interface DesktopAuthenticationView {
-  state: "authenticated" | "challenge_required" | "failed";
+  state:
+    | "authenticated"
+    | "challenge_required"
+    | "password_reset_required"
+    | "password_reset_complete"
+    | "failed";
   message: string;
 }
 
@@ -142,7 +147,13 @@ export function parseDesktopStatus(value: unknown): DesktopStatus {
 export function parseDesktopAuthenticationView(value: unknown): DesktopAuthenticationView {
   const result = z
     .object({
-      state: z.enum(["authenticated", "challenge_required", "failed"]),
+      state: z.enum([
+        "authenticated",
+        "challenge_required",
+        "password_reset_required",
+        "password_reset_complete",
+        "failed",
+      ]),
       message: z.string().min(1).max(maxDesktopStatusMessageLength),
     })
     .strict()

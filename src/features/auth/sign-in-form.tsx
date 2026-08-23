@@ -28,6 +28,15 @@ const verificationValues = z.object({
   code: z.string().regex(/^\d{6}$/, "Enter the six-digit verification code."),
 });
 
+const passwordResetRequestValues = z.object({
+  identifier: z.string().trim().min(1, "Enter your email or username.").max(320),
+});
+
+const passwordResetConfirmationValues = passwordResetRequestValues.extend({
+  code: z.string().regex(/^\d{6}$/, "Enter the six-digit recovery code."),
+  newPassword: z.string().min(12, "Use at least 12 characters.").max(512),
+});
+
 type IdentifierStatus = "idle" | "checking" | "ready" | "invalid";
 
 /** A one-time form that submits credentials directly to the native authentication boundary. */
@@ -61,7 +70,10 @@ export function SignInForm({
         setChallengeRequired(response.state === "challenge_required");
         setResult(response);
       } catch {
-        setResult({ state: "failed", message: "Authentication is temporarily unavailable." });
+        setResult({
+          state: "failed",
+          message: "Cipher couldn't complete sign-in. Check your connection and try again.",
+        });
       } finally {
         form.reset(initialValues);
         setIdentifier("");
@@ -83,7 +95,10 @@ export function SignInForm({
   }, [identifier]);
 
   return (
-    <Card className="w-full max-w-md p-panel">
+    <Card className="relative w-full max-w-md p-panel">
+      <div className="absolute right-5 top-5 flex size-9 items-center justify-center rounded-md bg-elevated p-1.5">
+        <img alt="Cipher" className="size-full" src="/cipher-mark.svg" />
+      </div>
       <Badge
         aria-label="End-to-end encryption"
         title="End-to-end encrypted: only you and the people you message can read your conversations."
@@ -205,7 +220,10 @@ function VerificationForm({
       try {
         onResult(await submit({ flow: "continue_challenge", code: value.code.trim() }));
       } catch {
-        onResult({ state: "failed", message: "Authentication is temporarily unavailable." });
+        onResult({
+          state: "failed",
+          message: "Cipher couldn't verify that code. Check your connection and try again.",
+        });
       } finally {
         form.reset({ code: "" });
       }
@@ -246,6 +264,201 @@ function VerificationForm({
         )}
       </form.Subscribe>
     </form>
+  );
+}
+
+/** Password recovery is an explicit route so sign-in remains focused and credentials stay transient. */
+export function PasswordResetForm({
+  authenticate = desktopAuthenticate,
+}: {
+  authenticate?: (request: DesktopAuthenticationRequest) => Promise<DesktopAuthenticationView>;
+} = {}): JSX.Element {
+  const requestIdentifierId = useId();
+  const confirmIdentifierId = useId();
+  const codeId = useId();
+  const passwordId = useId();
+  const [awaitingCode, setAwaitingCode] = useState(false);
+  const [result, setResult] = useState<DesktopAuthenticationView | undefined>();
+  const mutation = useMutation({
+    mutationFn: (request: DesktopAuthenticationRequest) => authenticate(request),
+    retry: false,
+  });
+  const requestForm = useForm({
+    defaultValues: { identifier: "" },
+    validators: { onSubmit: passwordResetRequestValues },
+    onSubmit: async ({ value }) => {
+      try {
+        const response = await mutation.mutateAsync({
+          flow: "begin_password_reset",
+          identifier: value.identifier.trim(),
+        });
+        setAwaitingCode(response.state === "password_reset_required");
+        setResult(response);
+      } catch {
+        setResult({ state: "failed", message: "Password reset is unavailable right now." });
+      } finally {
+        requestForm.reset({ identifier: "" });
+      }
+    },
+  });
+  const confirmationForm = useForm({
+    defaultValues: { identifier: "", code: "", newPassword: "" },
+    validators: { onSubmit: passwordResetConfirmationValues },
+    onSubmit: async ({ value }) => {
+      try {
+        setResult(
+          await mutation.mutateAsync({
+            flow: "confirm_password_reset",
+            identifier: value.identifier.trim(),
+            code: value.code.trim(),
+            newPassword: value.newPassword,
+          }),
+        );
+      } catch {
+        setResult({ state: "failed", message: "Password reset is unavailable right now." });
+      } finally {
+        confirmationForm.reset({ identifier: "", code: "", newPassword: "" });
+      }
+    },
+  });
+
+  return (
+    <Card className="w-full max-w-md p-panel">
+      <Badge tone="neutral">Account recovery</Badge>
+      <h1 className="type-page-title mt-paragraph">Reset your password</h1>
+      <p className="type-body-muted mt-paragraph">
+        {awaitingCode
+          ? "Enter the code from your email and choose a new password."
+          : "We’ll send a recovery code if your account is eligible."}
+      </p>
+      {awaitingCode ? (
+        <form
+          className="mt-section grid gap-4"
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            void confirmationForm.handleSubmit();
+          }}
+        >
+          <confirmationForm.Field name="identifier">
+            {(field) => (
+              <div className="grid gap-2">
+                <Label htmlFor={confirmIdentifierId}>Email or username</Label>
+                <Input
+                  autoComplete="username"
+                  id={confirmIdentifierId}
+                  maxLength={320}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  value={field.state.value}
+                />
+                <FieldError
+                  id={`${confirmIdentifierId}-error`}
+                  message={field.state.meta.errors[0]}
+                />
+              </div>
+            )}
+          </confirmationForm.Field>
+          <confirmationForm.Field name="code">
+            {(field) => (
+              <div className="grid gap-2">
+                <Label htmlFor={codeId}>Recovery code</Label>
+                <Input
+                  autoComplete="one-time-code"
+                  id={codeId}
+                  inputMode="numeric"
+                  maxLength={6}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  value={field.state.value}
+                />
+                <FieldError id={`${codeId}-error`} message={field.state.meta.errors[0]} />
+              </div>
+            )}
+          </confirmationForm.Field>
+          <confirmationForm.Field name="newPassword">
+            {(field) => (
+              <div className="grid gap-2">
+                <Label htmlFor={passwordId}>New password</Label>
+                <Input
+                  autoComplete="new-password"
+                  id={passwordId}
+                  maxLength={512}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  type="password"
+                  value={field.state.value}
+                />
+                <FieldError id={`${passwordId}-error`} message={field.state.meta.errors[0]} />
+              </div>
+            )}
+          </confirmationForm.Field>
+          <confirmationForm.Subscribe
+            selector={(state) => [state.canSubmit, state.isSubmitting] as const}
+          >
+            {([canSubmit, isSubmitting]) => (
+              <Button disabled={!canSubmit || isSubmitting} type="submit">
+                {isSubmitting ? <LoadingLabel label="Updating password…" /> : "Update password"}
+              </Button>
+            )}
+          </confirmationForm.Subscribe>
+        </form>
+      ) : (
+        <form
+          className="mt-section grid gap-4"
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            void requestForm.handleSubmit();
+          }}
+        >
+          <requestForm.Field name="identifier">
+            {(field) => (
+              <div className="grid gap-2">
+                <Label htmlFor={requestIdentifierId}>Email or username</Label>
+                <Input
+                  aria-describedby={
+                    field.state.meta.errors.length ? `${requestIdentifierId}-error` : undefined
+                  }
+                  autoComplete="username"
+                  id={requestIdentifierId}
+                  maxLength={320}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  value={field.state.value}
+                />
+                <FieldError
+                  id={`${requestIdentifierId}-error`}
+                  message={field.state.meta.errors[0]}
+                />
+              </div>
+            )}
+          </requestForm.Field>
+          <requestForm.Subscribe
+            selector={(state) => [state.canSubmit, state.isSubmitting] as const}
+          >
+            {([canSubmit, isSubmitting]) => (
+              <Button disabled={!canSubmit || isSubmitting} type="submit">
+                {isSubmitting ? <LoadingLabel label="Sending code…" /> : "Send recovery code"}
+              </Button>
+            )}
+          </requestForm.Subscribe>
+        </form>
+      )}
+      {result ? (
+        <p
+          aria-live="polite"
+          className={
+            result.state === "failed"
+              ? "mt-paragraph type-caption text-destructive"
+              : "mt-paragraph type-caption text-success"
+          }
+          role={result.state === "failed" ? "alert" : "status"}
+        >
+          {result.message}
+        </p>
+      ) : null}
+    </Card>
   );
 }
 

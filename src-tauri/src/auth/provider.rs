@@ -8,6 +8,8 @@ use aws_sdk_cognitoidentityprovider::{
     config::{BehaviorVersion, Config, Region, retry::RetryConfig, timeout::TimeoutConfig},
     error::SdkError,
     operation::{
+        confirm_forgot_password::ConfirmForgotPasswordError,
+        forgot_password::ForgotPasswordError,
         initiate_auth::{InitiateAuthError, InitiateAuthOutput},
         respond_to_auth_challenge::{RespondToAuthChallengeError, RespondToAuthChallengeOutput},
     },
@@ -141,6 +143,38 @@ impl CognitoProvider for AwsCognitoProvider {
             .await
             .map_err(map_initiate_error)?;
         parse_refresh_output(output)
+    }
+
+    async fn begin_password_reset(&self, identifier: &str) -> Result<(), NativeAuthError> {
+        match self
+            .client
+            .forgot_password()
+            .client_id(&self.client_id)
+            .username(identifier)
+            .send()
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(error) => map_forgot_password_error(error),
+        }
+    }
+
+    async fn confirm_password_reset(
+        &self,
+        identifier: &str,
+        code: &str,
+        new_password: &str,
+    ) -> Result<(), NativeAuthError> {
+        self.client
+            .confirm_forgot_password()
+            .client_id(&self.client_id)
+            .username(identifier)
+            .confirmation_code(code)
+            .password(new_password)
+            .send()
+            .await
+            .map(|_| ())
+            .map_err(map_confirm_password_reset_error)
     }
 }
 
@@ -337,6 +371,42 @@ fn map_respond_error(
         };
     };
     map_respond_service_error(error)
+}
+
+fn map_forgot_password_error(error: SdkError<ForgotPasswordError>) -> Result<(), NativeAuthError> {
+    let Some(error) = error.as_service_error() else {
+        return Err(NativeAuthError::new(NativeAuthErrorCode::Unavailable));
+    };
+    if error.is_too_many_requests_exception() {
+        Err(NativeAuthError::new(NativeAuthErrorCode::RateLimited))
+    } else if error.is_not_authorized_exception() || error.is_user_not_found_exception() {
+        // Preserve an indistinguishable recovery response so this public client
+        // cannot become an account-existence oracle.
+        Ok(())
+    } else {
+        Err(NativeAuthError::new(NativeAuthErrorCode::Unavailable))
+    }
+}
+
+fn map_confirm_password_reset_error(
+    error: SdkError<ConfirmForgotPasswordError>,
+) -> NativeAuthError {
+    let Some(error) = error.as_service_error() else {
+        return NativeAuthError::new(NativeAuthErrorCode::Unavailable);
+    };
+    if error.is_too_many_requests_exception() {
+        NativeAuthError::new(NativeAuthErrorCode::RateLimited)
+    } else if error.is_invalid_password_exception() {
+        NativeAuthError::new(NativeAuthErrorCode::PasswordRejected)
+    } else if error.is_code_mismatch_exception()
+        || error.is_expired_code_exception()
+        || error.is_not_authorized_exception()
+        || error.is_user_not_found_exception()
+    {
+        NativeAuthError::new(NativeAuthErrorCode::InvalidCredentials)
+    } else {
+        NativeAuthError::new(NativeAuthErrorCode::Unavailable)
+    }
 }
 
 fn map_respond_service_error(error: &RespondToAuthChallengeError) -> NativeAuthError {

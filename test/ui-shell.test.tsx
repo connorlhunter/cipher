@@ -34,7 +34,7 @@ const { RouterProvider, createMemoryHistory, createRootRoute, createRoute, creat
   await import("@tanstack/react-router");
 const { router } = await import("../src/routes");
 const { RouteFocusFrame } = await import("../src/app/focus-restoration");
-const { SignInForm } = await import("../src/features/auth/sign-in-form");
+const { PasswordResetForm, SignInForm } = await import("../src/features/auth/sign-in-form");
 const { AppearanceRoute, OverviewRoute } = await import("../src/routes");
 
 function shell(boundary: NativeThemeBoundary): JSX.Element {
@@ -322,6 +322,32 @@ describe("desktop shell accessibility", () => {
     expect(screen.getByRole("status").textContent).toContain("Signed in securely.");
     expect(screen.queryByLabelText("Verification code")).toBeNull();
     expect(requests.map((request) => request.flow)).toEqual(["sign_in", "continue_challenge"]);
+  });
+
+  test("keeps password recovery as its own credential-clearing form", async () => {
+    const requests: Array<Record<string, string>> = [];
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PasswordResetForm
+          authenticate={async (request) => {
+            requests.push(request);
+            return {
+              state: "password_reset_required",
+              message: "If an account is eligible, a recovery code is on its way.",
+            };
+          }}
+        />
+      </QueryClientProvider>,
+    );
+
+    const user = userEvent.setup({ document: browser.document as unknown as Document });
+    const identifier = screen.getByLabelText("Email or username");
+    await user.type(identifier, "cipher.user");
+    await user.click(screen.getByRole("button", { name: "Send recovery code" }));
+
+    expect(requests).toEqual([{ flow: "begin_password_reset", identifier: "cipher.user" }]);
+    expect(await screen.findByLabelText("Recovery code")).toBeDefined();
+    expect((screen.getByLabelText("Email or username") as HTMLInputElement).value).toBe("");
   });
 
   test("keeps overview and appearance copy short and centered on the project", async () => {

@@ -82,6 +82,20 @@ pub enum AuthenticationRequest {
         /// Permanent password selected during redemption.
         new_password: SecretText,
     },
+    /// Requests a one-time password-recovery code without revealing account state.
+    BeginPasswordReset {
+        /// Cognito email alias or username.
+        identifier: SecretText,
+    },
+    /// Confirms a password-recovery code and selects a replacement password.
+    ConfirmPasswordReset {
+        /// Cognito email alias or username.
+        identifier: SecretText,
+        /// One-time recovery code.
+        code: SecretText,
+        /// Replacement password that satisfies the local policy.
+        new_password: SecretText,
+    },
     /// Completes a native-held email or authenticator-app verification challenge.
     ContinueChallenge {
         /// One-time verification value. It is never retained by the webview.
@@ -108,6 +122,16 @@ impl AuthenticationRequest {
                 validate_credential(temporary_password.as_str())?;
                 validate_new_password(new_password.as_str())
             }
+            Self::BeginPasswordReset { identifier } => validate_identifier(identifier.as_str()),
+            Self::ConfirmPasswordReset {
+                identifier,
+                code,
+                new_password,
+            } => {
+                validate_identifier(identifier.as_str())?;
+                validate_one_time_code(code.as_str())?;
+                validate_new_password(new_password.as_str())
+            }
             Self::ContinueChallenge { code } => validate_one_time_code(code.as_str()),
         }
     }
@@ -123,7 +147,9 @@ impl AuthenticationRequest {
                 temporary_password,
                 ..
             } => (identifier.as_str(), temporary_password.as_str()),
-            Self::ContinueChallenge { .. } => {
+            Self::BeginPasswordReset { .. }
+            | Self::ConfirmPasswordReset { .. }
+            | Self::ContinueChallenge { .. } => {
                 unreachable!("challenge continuations do not start SRP")
             }
         }
@@ -372,6 +398,17 @@ pub trait CognitoProvider: Send + Sync {
         &self,
         refresh_material: &SecretBytes,
     ) -> Result<CognitoRefresh, NativeAuthError>;
+
+    /// Requests a Cognito password-recovery code for a bounded identifier.
+    async fn begin_password_reset(&self, identifier: &str) -> Result<(), NativeAuthError>;
+
+    /// Confirms a Cognito password-recovery code with a replacement password.
+    async fn confirm_password_reset(
+        &self,
+        identifier: &str,
+        code: &str,
+        new_password: &str,
+    ) -> Result<(), NativeAuthError>;
 }
 
 trait AuthClock: Send + Sync {
@@ -519,7 +556,45 @@ impl NativeCognitoAuthenticator {
             AuthenticationRequest::ContinueChallenge { .. } => {
                 Err(NativeAuthError::new(NativeAuthErrorCode::InvalidRequest))
             }
+            AuthenticationRequest::BeginPasswordReset { .. }
+            | AuthenticationRequest::ConfirmPasswordReset { .. } => {
+                Err(NativeAuthError::new(NativeAuthErrorCode::InvalidRequest))
+            }
         }
+    }
+
+    /// Requests a password-recovery code without carrying account state back to the renderer.
+    pub async fn begin_password_reset(
+        &self,
+        identifier: &SecretText,
+        cancellation: &OperationCancellation,
+    ) -> Result<(), NativeAuthError> {
+        ensure_not_cancelled(cancellation)?;
+        self.limiter.record(self.clock.monotonic_now())?;
+        validate_identifier(identifier.as_str())?;
+        self.provider
+            .begin_password_reset(identifier.as_str())
+            .await?;
+        ensure_not_cancelled(cancellation)
+    }
+
+    /// Confirms a password-recovery code and leaves sign-in as a separate explicit step.
+    pub async fn confirm_password_reset(
+        &self,
+        identifier: &SecretText,
+        code: &SecretText,
+        new_password: &SecretText,
+        cancellation: &OperationCancellation,
+    ) -> Result<(), NativeAuthError> {
+        ensure_not_cancelled(cancellation)?;
+        self.limiter.record(self.clock.monotonic_now())?;
+        validate_identifier(identifier.as_str())?;
+        validate_one_time_code(code.as_str())?;
+        validate_new_password(new_password.as_str())?;
+        self.provider
+            .confirm_password_reset(identifier.as_str(), code.as_str(), new_password.as_str())
+            .await?;
+        ensure_not_cancelled(cancellation)
     }
 
     /// Completes one native-held verification continuation without exposing its
@@ -659,6 +734,10 @@ pub enum AuthenticationViewState {
     Authenticated,
     /// A configured verification or MFA screen must collect one bounded response.
     ChallengeRequired,
+    /// A recovery code was requested and a replacement-password form may be shown.
+    PasswordResetRequired,
+    /// Password recovery completed; a separate sign-in is required.
+    PasswordResetComplete,
     /// The submission failed with fixed display text and no retained credential state.
     Failed,
 }
@@ -1072,6 +1151,19 @@ mod tests {
         }
 
         async fn refresh(&self, _: &SecretBytes) -> Result<CognitoRefresh, NativeAuthError> {
+            Err(NativeAuthError::new(NativeAuthErrorCode::Unavailable))
+        }
+
+        async fn begin_password_reset(&self, _: &str) -> Result<(), NativeAuthError> {
+            Err(NativeAuthError::new(NativeAuthErrorCode::Unavailable))
+        }
+
+        async fn confirm_password_reset(
+            &self,
+            _: &str,
+            _: &str,
+            _: &str,
+        ) -> Result<(), NativeAuthError> {
             Err(NativeAuthError::new(NativeAuthErrorCode::Unavailable))
         }
     }
