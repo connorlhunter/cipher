@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>Cipher</title>
+  <rect width="512" height="512" rx="112" fill="#10141b"/>
+  <path d="M256 104 124 180v152l132 76 132-76V180L256 104Zm0 52 87 50-87 50-87-50 87-50Zm-80 91 56 32v65l-56-32v-65Zm104 97v-65l56-32v65l-56 32Z" fill="#8eabff"/>
+</svg>
