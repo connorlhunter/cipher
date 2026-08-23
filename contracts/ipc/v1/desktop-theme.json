@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "command": "desktop_theme",
+  "response": {
+    "preference": "system",
+    "scheme": "midnight",
+    "resolved": "dark"
+  }
+}

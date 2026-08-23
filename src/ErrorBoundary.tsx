@@ -20,6 +20,8 @@ interface ErrorBoundaryState {
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState = { failed: false };
 
+  private fallback: HTMLElement | null = null;
+
   /**
    * @returns State that activates the fallback interface.
    */
@@ -38,16 +40,34 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     // A later diagnostics exporter may use only a fixed, content-free code.
   }
 
+  /** Moves keyboard focus to the replacement content after an unrecoverable render failure. */
+  public componentDidUpdate(): void {
+    if (this.state.failed) {
+      this.fallback?.focus({ preventScroll: true });
+    }
+  }
+
   /**
    * @returns The protected children or the application fallback.
    */
   public render(): JSX.Element | ReactNode {
     if (this.state.failed) {
       return (
-        <main>
-          <p className="eyebrow">Cipher</p>
-          <h1>Unable to open Cipher</h1>
-          <p className="status">Restart the app and try again.</p>
+        <main className="grid min-h-dvh place-items-center bg-canvas p-6 text-text" tabIndex={-1}>
+          <section
+            aria-labelledby="app-error-title"
+            className="w-full max-w-lg rounded-lg border border-border bg-surface p-6 shadow-sm"
+            ref={(element) => {
+              this.fallback = element;
+            }}
+            tabIndex={-1}
+          >
+            <p className="type-label text-accent">Cipher</p>
+            <h1 className="type-page-title mt-3" id="app-error-title">
+              Unable to open Cipher
+            </h1>
+            <p className="type-body-muted mt-paragraph">Restart the app and try again.</p>
+          </section>
         </main>
       );
     }

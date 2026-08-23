@@ -2,11 +2,16 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
   desktopCommands,
+  desktopThemeChangedEvent,
   desktopProtocol,
   parseDesktopDiagnostics,
   parseDesktopStatus,
+  parseDesktopTheme,
   type DesktopDiagnostics,
   type DesktopStatus,
+  type DesktopTheme,
+  type DesktopThemePreference,
+  type DesktopThemeScheme,
 } from "./desktop-contract";
 import {
   subscribeToRendererPurgeEvents,
@@ -17,8 +22,12 @@ import {
 export {
   parseDesktopDiagnostics,
   parseDesktopStatus,
+  parseDesktopTheme,
   type DesktopDiagnostics,
   type DesktopStatus,
+  type DesktopTheme,
+  type DesktopThemePreference,
+  type DesktopThemeScheme,
 } from "./desktop-contract";
 
 /** Invokes and validates the native desktop-status command. */
@@ -69,4 +78,68 @@ export async function desktopDiagnosticsWith(
  */
 export async function desktopDiagnostics(): Promise<DesktopDiagnostics> {
   return desktopDiagnosticsWith((command, arguments_) => invoke<unknown>(command, arguments_));
+}
+
+/** Invokes and validates the native theme view through an injectable command source. */
+export async function desktopThemeWith(
+  invokeCommand: (command: string, arguments_: { protocolVersion: number }) => Promise<unknown>,
+): Promise<DesktopTheme> {
+  return parseDesktopTheme(
+    await invokeCommand(desktopCommands.theme, { protocolVersion: desktopProtocol.current }),
+  );
+}
+
+/** Returns the resolved appearance selected by the native desktop core. */
+export async function desktopTheme(): Promise<DesktopTheme> {
+  return desktopThemeWith((command, arguments_) => invoke<unknown>(command, arguments_));
+}
+
+/** Invokes and validates a native-owned theme preference update. */
+export async function setDesktopThemeWith(
+  invokeCommand: (
+    command: string,
+    arguments_: { preference: DesktopThemePreference; protocolVersion: number },
+  ) => Promise<unknown>,
+  preference: DesktopThemePreference,
+): Promise<DesktopTheme> {
+  return parseDesktopTheme(
+    await invokeCommand(desktopCommands.setTheme, {
+      preference,
+      protocolVersion: desktopProtocol.current,
+    }),
+  );
+}
+
+/** Updates the native preference without persisting any theme value in the webview. */
+export async function setDesktopTheme(preference: DesktopThemePreference): Promise<DesktopTheme> {
+  return setDesktopThemeWith(
+    (command, arguments_) => invoke<unknown>(command, arguments_),
+    preference,
+  );
+}
+
+/** A narrow subscription boundary for content-free native theme notifications. */
+export type DesktopThemeEventSubscriber = (
+  eventName: string,
+  handler: () => void,
+) => Promise<() => void | Promise<void>>;
+
+/** Keeps the native theme-event adapter injectable for focused UI tests. */
+export async function listenForDesktopThemeChangesWith(
+  subscribe: DesktopThemeEventSubscriber,
+  refresh: () => Promise<void>,
+): Promise<() => void | Promise<void>> {
+  return subscribe(desktopThemeChangedEvent, () => {
+    void refresh();
+  });
+}
+
+/** Re-reads the resolved theme when the native window manager reports a change. */
+export async function listenForDesktopThemeChanges(
+  refresh: () => Promise<void>,
+): Promise<() => void | Promise<void>> {
+  return listenForDesktopThemeChangesWith(
+    (eventName, handler) => listen(eventName, () => handler()),
+    refresh,
+  );
 }

@@ -5,5 +5,10 @@
   "local": true,
   "webviews": ["main"],
   "platforms": ["macOS", "windows"],
-  "permissions": ["allow-desktop-status", "allow-desktop-diagnostics"]
+  "permissions": [
+    "allow-desktop-status",
+    "allow-desktop-diagnostics",
+    "allow-desktop-theme",
+    "allow-desktop-set-theme"
+  ]
 }

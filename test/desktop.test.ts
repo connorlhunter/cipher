@@ -4,11 +4,18 @@ import { readFileSync } from "node:fs";
 import {
   desktopDiagnosticsWith,
   desktopStatusWith,
+  desktopThemeWith,
+  listenForDesktopThemeChangesWith,
   parseDesktopDiagnostics,
   parseDesktopStatus,
+  parseDesktopTheme,
+  setDesktopThemeWith,
 } from "../src/desktop";
 import {
   desktopCommands,
+  desktopThemeSchemeClassifications,
+  desktopThemeSchemes,
+  desktopThemeChangedEvent,
   desktopProtocol,
   maxDesktopStatusMessageLength,
   supportsDesktopProtocol,
@@ -112,5 +119,93 @@ describe("parseDesktopDiagnostics", () => {
     expect(fixture.command).toBe(desktopCommands.diagnostics);
     expect(fixture.protocolVersion).toBe(desktopProtocol.current);
     expect(parseDesktopDiagnostics(fixture.response)).toEqual(diagnostic);
+  });
+});
+
+describe("desktop theme boundary", () => {
+  const theme = { preference: "system", scheme: "midnight", resolved: "dark" } as const;
+
+  test("accepts only the native-owned preference and resolved appearance", async () => {
+    expect(parseDesktopTheme(theme)).toEqual(theme);
+    await expect(
+      desktopThemeWith(async (command, arguments_) =>
+        command === desktopCommands.theme && arguments_.protocolVersion === desktopProtocol.current
+          ? theme
+          : {},
+      ),
+    ).resolves.toEqual(theme);
+
+    const fixture = JSON.parse(readFileSync("contracts/ipc/v1/desktop-theme.json", "utf8")) as {
+      command: string;
+      protocolVersion: number;
+      response: unknown;
+    };
+    expect(fixture.command).toBe(desktopCommands.theme);
+    expect(fixture.protocolVersion).toBe(desktopProtocol.current);
+    expect(parseDesktopTheme(fixture.response)).toEqual(theme);
+  });
+
+  test.each([
+    null,
+    {},
+    { preference: "browser", scheme: "midnight", resolved: "dark" },
+    { preference: "system", scheme: "atlas", resolved: "auto" },
+    { preference: "system", scheme: "harbor", resolved: "dark" },
+    { preference: "rose", scheme: "rose", resolved: "dark" },
+    { preference: "onyx", scheme: "midnight", resolved: "dark" },
+    { preference: "system", scheme: "midnight", resolved: "dark", token: "forbidden" },
+  ])("rejects an unsafe native theme view: %p", (value) => {
+    expect(() => parseDesktopTheme(value)).toThrow("invalid theme");
+  });
+
+  test("accepts every explicit scheme only with its native classification", () => {
+    for (const scheme of desktopThemeSchemes) {
+      expect(
+        parseDesktopTheme({
+          preference: scheme,
+          scheme,
+          resolved: desktopThemeSchemeClassifications[scheme],
+        }),
+      ).toEqual({
+        preference: scheme,
+        scheme,
+        resolved: desktopThemeSchemeClassifications[scheme],
+      });
+    }
+  });
+
+  test("sends one bounded preference to the native command", async () => {
+    await expect(
+      setDesktopThemeWith(async (command, arguments_) => {
+        expect(command).toBe(desktopCommands.setTheme);
+        expect(arguments_).toEqual({
+          preference: "rose",
+          protocolVersion: desktopProtocol.current,
+        });
+        return { preference: "rose", scheme: "rose", resolved: "light" };
+      }, "rose"),
+    ).resolves.toEqual({ preference: "rose", scheme: "rose", resolved: "light" });
+  });
+
+  test("keeps native theme notifications content-free and injectable", async () => {
+    let eventName = "";
+    let handler: (() => void) | undefined;
+    let refreshes = 0;
+    const stop = await listenForDesktopThemeChangesWith(
+      async (nextEventName, nextHandler) => {
+        eventName = nextEventName;
+        handler = nextHandler;
+        return () => undefined;
+      },
+      async () => {
+        refreshes += 1;
+      },
+    );
+
+    expect(eventName).toBe(desktopThemeChangedEvent);
+    handler?.();
+    await Promise.resolve();
+    expect(refreshes).toBe(1);
+    await stop();
   });
 });
