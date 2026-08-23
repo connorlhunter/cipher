@@ -12,9 +12,13 @@ import { DesktopShell } from "../app/desktop-shell";
 import { Badge } from "../components/ui/badge";
 import { buttonVariants } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { DeviceSettings } from "../features/settings/device-settings";
+import {
+  ChangelogSettings,
+  DeviceSettings,
+  UninstallSettings,
+} from "../features/settings/device-settings";
 import { ThemePreferenceControl } from "../features/theme/theme-preference-control";
-import { PasswordResetForm, SignInForm } from "../features/auth/sign-in-form";
+import { PasswordResetForm, SignInForm, SignUpForm } from "../features/auth/sign-in-form";
 import { cn } from "../lib/utils";
 
 /** A safe fallback for route-level failures that never serializes the original error. */
@@ -75,19 +79,11 @@ export function OverviewRoute(): JSX.Element {
               <LogIn aria-hidden="true" size={17} strokeWidth={1.8} />
               Log in
             </Link>
-            <button
-              aria-describedby="sign-up-coming-soon"
-              className={cn(buttonVariants({ variant: "secondary" }))}
-              disabled
-              type="button"
-            >
+            <Link className={cn(buttonVariants({ variant: "secondary" }))} to="/sign-up">
               <UserPlus aria-hidden="true" size={17} strokeWidth={1.8} />
               Sign up
-            </button>
+            </Link>
           </div>
-          <p className="type-caption mt-2 text-muted" id="sign-up-coming-soon">
-            Sign up is coming soon.
-          </p>
         </div>
       </div>
     </section>
@@ -112,7 +108,54 @@ export function AppearanceRoute(): JSX.Element {
           <ThemePreferenceControl />
         </div>
       </Card>
-      <DeviceSettings />
+    </section>
+  );
+}
+
+/** Device controls are independent from general appearance preferences. */
+export function DeviceRoute(): JSX.Element {
+  return (
+    <section aria-labelledby="device-title" className="mx-auto max-w-3xl py-5 lg:py-9">
+      <Badge tone="neutral">Settings</Badge>
+      <h1 className="type-page-title mt-paragraph" id="device-title">
+        Device
+      </h1>
+      <p className="type-body-muted mt-paragraph max-w-prose">Manage this Cipher device.</p>
+      <div className="mt-section">
+        <DeviceSettings />
+      </div>
+    </section>
+  );
+}
+
+/** Displays project release notes without mixing them into device settings. */
+export function ChangelogRoute(): JSX.Element {
+  return (
+    <section aria-labelledby="changelog-title" className="mx-auto max-w-3xl py-5 lg:py-9">
+      <Badge tone="neutral">Cipher</Badge>
+      <h1 className="type-page-title mt-paragraph" id="changelog-title">
+        Changelog
+      </h1>
+      <p className="type-body-muted mt-paragraph max-w-prose">What&apos;s changed in Cipher.</p>
+      <div className="mt-section">
+        <ChangelogSettings />
+      </div>
+    </section>
+  );
+}
+
+/** Keeps removal controls on a focused, separately navigable route. */
+export function UninstallRoute(): JSX.Element {
+  return (
+    <section aria-labelledby="uninstall-title" className="mx-auto max-w-3xl py-5 lg:py-9">
+      <Badge tone="destructive">Device</Badge>
+      <h1 className="type-page-title mt-paragraph" id="uninstall-title">
+        Uninstall Cipher
+      </h1>
+      <p className="type-body-muted mt-paragraph max-w-prose">Remove Cipher from this device.</p>
+      <div className="mt-section">
+        <UninstallSettings />
+      </div>
     </section>
   );
 }
@@ -122,6 +165,15 @@ export function SignInRoute(): JSX.Element {
   return (
     <section className="mx-auto grid min-h-full max-w-3xl place-items-center py-5 lg:py-9">
       <SignInForm />
+    </section>
+  );
+}
+
+/** Invited people complete their Cipher account without browser-persisted credentials. */
+export function SignUpRoute(): JSX.Element {
+  return (
+    <section className="mx-auto grid min-h-full max-w-3xl place-items-center py-5 lg:py-9">
+      <SignUpForm />
     </section>
   );
 }
@@ -152,10 +204,34 @@ const appearanceRoute = createRoute({
   component: AppearanceRoute,
 });
 
+const deviceRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/device",
+  component: DeviceRoute,
+});
+
+const changelogRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/changelog",
+  component: ChangelogRoute,
+});
+
+const uninstallRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/uninstall",
+  component: UninstallRoute,
+});
+
 const signInRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/sign-in",
   component: SignInRoute,
+});
+
+const signUpRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/sign-up",
+  component: SignUpRoute,
 });
 
 const passwordResetRoute = createRoute({
@@ -167,7 +243,11 @@ const passwordResetRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   overviewRoute,
   appearanceRoute,
+  deviceRoute,
+  changelogRoute,
+  uninstallRoute,
   signInRoute,
+  signUpRoute,
   passwordResetRoute,
 ]);
 

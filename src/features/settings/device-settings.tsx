@@ -205,45 +205,46 @@ function UninstallCipher(): JSX.Element {
 /** Non-secret device controls that remain useful before communications features ship. */
 export function DeviceSettings(): JSX.Element {
   return (
-    <div className="mt-section grid gap-panel">
-      <Card className="p-panel">
-        <h2 className="type-section-title">Device</h2>
-        <div className="mt-panel grid gap-2">
-          <PlaceholderSetting icon={Mic} title="Voice" />
-          <PlaceholderSetting icon={Video} title="Video" />
-          <PlaceholderSetting icon={Bell} title="Notifications" />
-        </div>
-      </Card>
+    <Card className="p-panel">
+      <h2 className="type-section-title">Device</h2>
+      <div className="mt-panel grid gap-2">
+        <PlaceholderSetting icon={Mic} title="Voice" />
+        <PlaceholderSetting icon={Video} title="Video" />
+        <PlaceholderSetting icon={Bell} title="Notifications" />
+      </div>
+    </Card>
+  );
+}
 
-      <Card className="p-panel">
-        <details>
-          <summary className="flex min-h-control cursor-pointer list-none items-center gap-3 rounded-md text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
-            <Newspaper
-              aria-hidden="true"
-              className="shrink-0 text-muted"
-              size={18}
-              strokeWidth={1.8}
-            />
-            <span className="type-label">Changelog</span>
-          </summary>
-          <div className="mt-panel max-h-80 overflow-auto rounded-md bg-elevated p-3 text-text">
-            {renderChangelog()}
-          </div>
-        </details>
-      </Card>
+/** The project-owned changelog, rendered from its checked-in Markdown source. */
+export function ChangelogSettings(): JSX.Element {
+  return (
+    <Card className="p-panel">
+      <div className="flex items-center gap-3">
+        <Newspaper aria-hidden="true" className="shrink-0 text-muted" size={18} strokeWidth={1.8} />
+        <h2 className="type-section-title">Changelog</h2>
+      </div>
+      <div className="mt-panel max-h-[min(34rem,calc(100dvh-15rem))] overflow-auto rounded-md bg-elevated p-3 text-text">
+        {renderChangelog()}
+      </div>
+    </Card>
+  );
+}
 
-      <Card className="flex min-h-36 flex-col p-panel">
-        <div>
-          <h2 className="type-section-title">Uninstall Cipher</h2>
-          <p className="type-body-muted mt-paragraph max-w-prose">
-            Remove Cipher from this device and choose whether saved credentials stay available for a
-            future reinstall.
-          </p>
-        </div>
-        <div className="mt-auto pt-panel">
-          <UninstallCipher />
-        </div>
-      </Card>
-    </div>
+/** Native uninstall and credential-removal controls kept separate from device preferences. */
+export function UninstallSettings(): JSX.Element {
+  return (
+    <Card className="flex min-h-52 flex-col p-panel">
+      <div>
+        <h2 className="type-section-title">Uninstall Cipher</h2>
+        <p className="type-body-muted mt-paragraph max-w-prose">
+          Remove Cipher from this device and choose whether saved credentials stay available for a
+          future reinstall.
+        </p>
+      </div>
+      <div className="mt-auto pt-panel">
+        <UninstallCipher />
+      </div>
+    </Card>
   );
 }

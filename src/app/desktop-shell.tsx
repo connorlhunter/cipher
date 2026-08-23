@@ -4,7 +4,11 @@ import {
   LockKeyhole,
   LogIn,
   MessageSquare,
+  MonitorSmartphone,
+  Newspaper,
   Settings2,
+  Trash2,
+  UserPlus,
 } from "lucide-react";
 import { type JSX, type ReactNode } from "react";
 import { Link, Outlet } from "@tanstack/react-router";
@@ -18,8 +22,15 @@ import { focusRouteContent, RouteFocusRestoration } from "./focus-restoration";
 const navigation = [
   { icon: LayoutPanelTop, label: "Overview", to: "/" },
   { icon: LogIn, label: "Sign in", to: "/sign-in" },
+  { icon: UserPlus, label: "Sign up", to: "/sign-up" },
   { icon: KeyRound, label: "Password reset", to: "/password-reset" },
   { icon: Settings2, label: "Appearance", to: "/settings/appearance" },
+  { icon: MonitorSmartphone, label: "Device", to: "/settings/device" },
+] as const;
+
+const utilityNavigation = [
+  { icon: Newspaper, label: "Changelog", to: "/changelog" },
+  { icon: Trash2, label: "Uninstall", to: "/uninstall" },
 ] as const;
 
 /** The theme-aware title bar, header, primary navigation, and responsive desktop grid. */
@@ -72,7 +83,24 @@ export function DesktopShell(): JSX.Element {
             </Link>
           ))}
         </div>
-        <div className="mt-auto pt-5">
+        <div className="mt-auto grid gap-1 pt-5">
+          <Separator className="mb-3" />
+          {utilityNavigation.map(({ icon: Icon, label, to }) => (
+            <Link
+              activeProps={{
+                "aria-current": "page",
+                className: "bg-elevated text-text shadow-xs",
+              }}
+              className={cn(
+                "type-label flex min-h-control items-center gap-3 rounded-md px-3 text-muted transition-colors hover:bg-elevated hover:text-text motion-reduce:transition-none",
+              )}
+              key={to}
+              to={to}
+            >
+              <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
+              <span>{label}</span>
+            </Link>
+          ))}
           <Separator />
           <div className="mt-3 grid gap-2 px-3">
             <Badge
