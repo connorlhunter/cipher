@@ -572,7 +572,9 @@ impl NativeCognitoAuthenticator {
         ensure_not_cancelled(cancellation)?;
         self.limiter.record(self.clock.monotonic_now())?;
         validate_identifier(identifier.as_str())?;
-        self.provider.begin_password_reset(identifier.as_str()).await?;
+        self.provider
+            .begin_password_reset(identifier.as_str())
+            .await?;
         ensure_not_cancelled(cancellation)
     }
 
