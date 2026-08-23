@@ -9,6 +9,7 @@
     "cdk": "cdk",
     "synth": "cdk synth",
     "test": "tsx --test test/*.test.ts",
+    "test:state-foundations": "tsx --test test/state-foundations.test.ts",
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "devDependencies": {

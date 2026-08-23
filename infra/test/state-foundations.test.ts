@@ -67,7 +67,7 @@ function outputValues(template: Template): Record<string, CloudFormationOutput> 
 }
 
 describe("Cipher state foundations", () => {
-  test("synthesizes an invite-only Cognito pool and a native SRP client", () => {
+  test("locks the invite-only public client to the native desktop auth policy", () => {
     const template = stateTemplate();
     const pool = properties(onlyResource(template, "AWS::Cognito::UserPool"));
     const client = properties(onlyResource(template, "AWS::Cognito::UserPoolClient"));
@@ -83,6 +83,13 @@ describe("Cipher state foundations", () => {
     });
     assert.deepEqual(pool.UsernameAttributes, ["email"]);
     assert.equal(pool.UserPoolName, "cipher-production-users");
+    assert.deepEqual(pool.Schema, [{ Mutable: true, Name: "email", Required: true }]);
+    assert.deepEqual(pool.VerificationMessageTemplate, {
+      DefaultEmailOption: "CONFIRM_WITH_CODE",
+      EmailMessage: "The verification code to your new account is {####}",
+      EmailSubject: "Verify your new account",
+      SmsMessage: "The verification code to your new account is {####}",
+    });
     assert.deepEqual(pool.Policies, {
       PasswordPolicy: {
         MinimumLength: 12,
@@ -92,11 +99,22 @@ describe("Cipher state foundations", () => {
         RequireUppercase: true,
       },
     });
+    for (const property of ["AliasAttributes", "LambdaConfig", "SmsConfiguration"]) {
+      assert.equal(property in pool, false, `did not expect ${property} on the user pool`);
+    }
 
+    assert.equal(client.AuthSessionValidity, 3);
     assert.equal(client.GenerateSecret, false);
     assert.equal(client.AllowedOAuthFlowsUserPoolClient, false);
-    assert.equal("CallbackURLs" in client, false);
-    assert.equal("LogoutURLs" in client, false);
+    for (const property of [
+      "AllowedOAuthFlows",
+      "AllowedOAuthScopes",
+      "CallbackURLs",
+      "DefaultRedirectURI",
+      "LogoutURLs",
+    ]) {
+      assert.equal(property in client, false, `did not expect ${property} on the public client`);
+    }
     assert.deepEqual(client.ExplicitAuthFlows, ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]);
     assert.equal(client.EnableTokenRevocation, true);
     assert.equal(client.PreventUserExistenceErrors, "ENABLED");
@@ -104,7 +122,13 @@ describe("Cipher state foundations", () => {
     assert.equal(client.AccessTokenValidity, 60);
     assert.equal(client.IdTokenValidity, 60);
     assert.equal(client.RefreshTokenValidity, 43200);
+    assert.deepEqual(client.TokenValidityUnits, {
+      AccessToken: "minutes",
+      IdToken: "minutes",
+      RefreshToken: "minutes",
+    });
     assert.equal(client.ClientName, "cipher-production-desktop");
+    assert.deepEqual(template.findResources("AWS::Cognito::UserPoolDomain"), {});
   });
 
   test("synthesizes only the documented tables, keys, and indexes with protected data controls", () => {
