@@ -96,12 +96,14 @@ export function addStateFoundations(
     selfSignUpEnabled: false,
     signInAliases: { email: true },
     standardAttributes: { email: { mutable: true, required: true } },
+    userVerification: { emailStyle: cognito.VerificationEmailStyle.CODE },
     userPoolName: resourceNames.userPool,
   });
 
   const userPoolClient = userPool.addClient("NativePublicClient", {
     accessTokenValidity: cdk.Duration.hours(1),
     authFlows: { userSrp: true },
+    authSessionValidity: cdk.Duration.minutes(3),
     disableOAuth: true,
     enableTokenRevocation: true,
     generateSecret: false,
