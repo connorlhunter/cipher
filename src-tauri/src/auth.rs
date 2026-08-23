@@ -194,6 +194,7 @@ impl CognitoChallengeStep {
         if session.is_empty()
             || session.len() > MAX_COGNITO_SESSION_BYTES
             || session.bytes().any(|byte| byte.is_ascii_control())
+            || !discard_unrecognized_challenge_parameters(kind, &mut parameters)
             || !valid_challenge_parameters(kind, &parameters)
         {
             zeroize_parameters(&mut parameters);
@@ -622,8 +623,11 @@ impl NativeAuthError {
             NativeAuthErrorCode::InvitationCompletionUncertain => {
                 "The invitation status could not be confirmed. Sign in with the new password to continue."
             }
-            NativeAuthErrorCode::InvalidResponse | NativeAuthErrorCode::Unavailable => {
-                "Authentication is temporarily unavailable."
+            NativeAuthErrorCode::InvalidResponse => {
+                "We couldn't complete the sign-in security check. Please try again."
+            }
+            NativeAuthErrorCode::Unavailable => {
+                "Sign-in isn't available right now. Please try again shortly."
             }
         }
     }
@@ -708,6 +712,34 @@ fn valid_challenge_parameters(
                 && value.len() <= challenge_parameter_limit(name)
                 && !value.bytes().any(|byte| byte.is_ascii_control())
         })
+}
+
+/// Keeps only the bounded Cognito fields that the native continuation consumes.
+///
+/// Cognito can add descriptive challenge parameters without changing the
+/// challenge itself. They are neither needed for the proof nor safe to retain,
+/// so discard them before applying Cipher's exact schema to the fields it uses.
+fn discard_unrecognized_challenge_parameters(
+    kind: CognitoChallengeKind,
+    parameters: &mut HashMap<String, String>,
+) -> bool {
+    let Some((allowed, _)) = challenge_parameter_schema(kind) else {
+        return false;
+    };
+    let unrecognized = parameters
+        .keys()
+        .filter(|name| !allowed.contains(&name.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    let had_unrecognized_metadata = !unrecognized.is_empty();
+    let accepts_additive_metadata = kind == CognitoChallengeKind::PasswordVerifier;
+    for name in unrecognized {
+        if let Some((mut name, mut value)) = parameters.remove_entry(&name) {
+            name.zeroize();
+            value.zeroize();
+        }
+    }
+    accepts_additive_metadata || !had_unrecognized_metadata
 }
 
 fn challenge_parameter_schema(
@@ -1270,6 +1302,34 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn password_verifier_discards_unrecognized_cognito_metadata() {
+        let parameters = HashMap::from([
+            ("SECRET_BLOCK".into(), "AQIDBA==".into()),
+            ("USER_ID_FOR_SRP".into(), "canonical-user".into()),
+            ("SALT".into(), "01".into()),
+            ("SRP_B".into(), "02".into()),
+            // Cognito challenge maps are extensible. This field is not needed
+            // for a user SRP proof and must not make the native flow reject an
+            // otherwise valid PASSWORD_VERIFIER response.
+            ("UNRECOGNIZED_COGNITO_FIELD".into(), "opaque-value".into()),
+        ]);
+
+        let challenge = CognitoChallengeStep::new(
+            CognitoChallengeKind::PasswordVerifier,
+            parameters,
+            "session".into(),
+        )
+        .unwrap();
+
+        assert!(
+            !challenge
+                .parameters()
+                .contains_key("UNRECOGNIZED_COGNITO_FIELD")
+        );
+        assert_eq!(challenge.parameters().len(), 4);
     }
 
     #[test]

@@ -240,11 +240,20 @@ fn decode_hex(value: &str) -> Result<Vec<u8>, CognitoSrpError> {
 }
 
 fn parse_public_b(value: &str) -> Result<BoxedUint, CognitoSrpError> {
-    if value.is_empty() || value.len() > COGNITO_MODULUS_BYTES * 2 {
+    // Cognito encodes positive big integers as signed values. A full-width
+    // 3072-bit public value whose first bit is set therefore carries one
+    // leading `00` sign byte (770 hexadecimal characters), which must be
+    // accepted without allowing a wider modulus value.
+    if value.is_empty() || value.len() > (COGNITO_MODULUS_BYTES + 1) * 2 {
         return Err(CognitoSrpError::MalformedChallenge);
     }
     let bytes = decode_hex(value)?;
-    let public_b = BoxedUint::from_be_slice(&bytes, COGNITO_MODULUS_BITS)
+    let magnitude = match bytes.as_slice() {
+        [0, magnitude @ ..] if magnitude.len() <= COGNITO_MODULUS_BYTES => magnitude,
+        magnitude if magnitude.len() <= COGNITO_MODULUS_BYTES => magnitude,
+        _ => return Err(CognitoSrpError::MalformedChallenge),
+    };
+    let public_b = BoxedUint::from_be_slice(magnitude, COGNITO_MODULUS_BITS)
         .map_err(|_| CognitoSrpError::MalformedChallenge)?;
     validate_public_b(&public_b)?;
     Ok(public_b)
@@ -434,8 +443,11 @@ mod tests {
         let full_width = format!("80{}", "00".repeat(COGNITO_MODULUS_BYTES - 1));
         assert_eq!(full_width.len(), COGNITO_MODULUS_BYTES * 2);
         assert!(parse_public_b(&full_width).is_ok());
+        let signed_full_width = format!("00{full_width}");
+        assert_eq!(signed_full_width.len(), (COGNITO_MODULUS_BYTES + 1) * 2);
+        assert!(parse_public_b(&signed_full_width).is_ok());
         let mut full_width_challenge = challenge(&vector);
-        full_width_challenge.insert("SRP_B".into(), full_width);
+        full_width_challenge.insert("SRP_B".into(), signed_full_width);
         assert!(
             exchange
                 .password_verifier(&full_width_challenge, &vector.timestamp)
