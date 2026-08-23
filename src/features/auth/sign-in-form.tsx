@@ -37,6 +37,15 @@ const passwordResetConfirmationValues = passwordResetRequestValues.extend({
   newPassword: z.string().min(12, "Use at least 12 characters.").max(512),
 });
 
+const signUpValues = z.object({
+  identifier: z.string().trim().min(1, "Enter your email or username.").max(320),
+  temporaryPassword: z
+    .string()
+    .min(1, "Enter the temporary password from your invitation.")
+    .max(512),
+  newPassword: z.string().min(12, "Use at least 12 characters.").max(512),
+});
+
 type IdentifierStatus = "idle" | "checking" | "ready" | "invalid";
 
 /** A one-time form that submits credentials directly to the native authentication boundary. */
@@ -187,6 +196,143 @@ export function SignInForm({
           </form.Subscribe>
         </form>
       )}
+      {result ? (
+        <p
+          aria-live="polite"
+          className={
+            result.state === "authenticated"
+              ? "mt-paragraph type-caption text-success"
+              : "mt-paragraph type-caption text-destructive"
+          }
+          role={result.state === "failed" ? "alert" : "status"}
+        >
+          {result.message}
+        </p>
+      ) : null}
+    </Card>
+  );
+}
+
+/** Completes an administrator-issued invitation without retaining credentials in the webview. */
+export function SignUpForm({
+  authenticate = desktopAuthenticate,
+}: {
+  authenticate?: (request: DesktopAuthenticationRequest) => Promise<DesktopAuthenticationView>;
+} = {}): JSX.Element {
+  const identifierId = useId();
+  const temporaryPasswordId = useId();
+  const newPasswordId = useId();
+  const [result, setResult] = useState<DesktopAuthenticationView | undefined>();
+  const mutation = useMutation({
+    mutationFn: (request: DesktopAuthenticationRequest) => authenticate(request),
+    retry: false,
+  });
+  const form = useForm({
+    defaultValues: { identifier: "", temporaryPassword: "", newPassword: "" },
+    validators: { onSubmit: signUpValues },
+    onSubmit: async ({ value }) => {
+      try {
+        setResult(
+          await mutation.mutateAsync({
+            flow: "accept_administrator_invitation",
+            identifier: value.identifier.trim(),
+            temporaryPassword: value.temporaryPassword,
+            newPassword: value.newPassword,
+          }),
+        );
+      } catch {
+        setResult({
+          state: "failed",
+          message: "Cipher couldn't create your account. Check your invitation and try again.",
+        });
+      } finally {
+        form.reset({ identifier: "", temporaryPassword: "", newPassword: "" });
+      }
+    },
+  });
+
+  return (
+    <Card className="relative w-full max-w-md p-panel">
+      <div className="absolute right-5 top-5 flex size-9 items-center justify-center rounded-md bg-elevated p-1.5">
+        <img alt="Cipher" className="size-full" src="/cipher-mark.svg" />
+      </div>
+      <Badge tone="neutral">
+        <LockKeyhole aria-hidden="true" className="mr-1" size={13} strokeWidth={1.8} />
+        E2EE
+      </Badge>
+      <h1 className="type-page-title mt-paragraph">Create your account</h1>
+      <p className="type-body-muted mt-paragraph">
+        Use the temporary password from your Cipher invitation.
+      </p>
+      <form
+        className="mt-section grid gap-4"
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
+      >
+        <form.Field name="identifier">
+          {(field) => (
+            <div className="grid gap-2">
+              <Label htmlFor={identifierId}>Email or username</Label>
+              <Input
+                autoComplete="username"
+                id={identifierId}
+                maxLength={320}
+                onBlur={field.handleBlur}
+                onChange={(event) => field.handleChange(event.target.value)}
+                value={field.state.value}
+              />
+              <FieldError id={`${identifierId}-error`} message={field.state.meta.errors[0]} />
+            </div>
+          )}
+        </form.Field>
+        <form.Field name="temporaryPassword">
+          {(field) => (
+            <div className="grid gap-2">
+              <Label htmlFor={temporaryPasswordId}>Temporary password</Label>
+              <Input
+                autoComplete="one-time-code"
+                id={temporaryPasswordId}
+                maxLength={512}
+                onBlur={field.handleBlur}
+                onChange={(event) => field.handleChange(event.target.value)}
+                type="password"
+                value={field.state.value}
+              />
+              <FieldError
+                id={`${temporaryPasswordId}-error`}
+                message={field.state.meta.errors[0]}
+              />
+            </div>
+          )}
+        </form.Field>
+        <form.Field name="newPassword">
+          {(field) => (
+            <div className="grid gap-2">
+              <Label htmlFor={newPasswordId}>New password</Label>
+              <Input
+                autoComplete="new-password"
+                id={newPasswordId}
+                maxLength={512}
+                onBlur={field.handleBlur}
+                onChange={(event) => field.handleChange(event.target.value)}
+                type="password"
+                value={field.state.value}
+              />
+              <FieldError id={`${newPasswordId}-error`} message={field.state.meta.errors[0]} />
+            </div>
+          )}
+        </form.Field>
+        <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting] as const}>
+          {([canSubmit, isSubmitting]) => (
+            <Button disabled={!canSubmit || isSubmitting} type="submit">
+              {isSubmitting ? <LoadingLabel label="Creating account…" /> : "Create account"}
+            </Button>
+          )}
+        </form.Subscribe>
+      </form>
       {result ? (
         <p
           aria-live="polite"

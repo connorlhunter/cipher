@@ -5,6 +5,7 @@ import { type JSX } from "react";
 import { Card } from "../src/components/ui/card";
 import { Input } from "../src/components/ui/input";
 import { Label } from "../src/components/ui/label";
+import type { DesktopAuthenticationRequest } from "../src/desktop";
 import {
   ThemePreferenceControl,
   nextThemePreference,
@@ -34,8 +35,10 @@ const { RouterProvider, createMemoryHistory, createRootRoute, createRoute, creat
   await import("@tanstack/react-router");
 const { router } = await import("../src/routes");
 const { RouteFocusFrame } = await import("../src/app/focus-restoration");
-const { PasswordResetForm, SignInForm } = await import("../src/features/auth/sign-in-form");
-const { AppearanceRoute, OverviewRoute } = await import("../src/routes");
+const { PasswordResetForm, SignInForm, SignUpForm } =
+  await import("../src/features/auth/sign-in-form");
+const { AppearanceRoute, ChangelogRoute, DeviceRoute, OverviewRoute, UninstallRoute } =
+  await import("../src/routes");
 
 function shell(boundary: NativeThemeBoundary): JSX.Element {
   return (
@@ -368,9 +371,7 @@ describe("desktop shell accessibility", () => {
     ).toBeDefined();
     expect(screen.getByText("Built for E2EE")).toBeDefined();
     expect(screen.getByRole("link", { name: "Log in" }).getAttribute("href")).toBe("/sign-in");
-    expect((screen.getByRole("button", { name: "Sign up" }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect(screen.getByRole("link", { name: "Sign up" }).getAttribute("href")).toBe("/sign-up");
     cleanup();
     render(
       <ThemeProvider
@@ -384,10 +385,48 @@ describe("desktop shell accessibility", () => {
       </ThemeProvider>,
     );
     expect(screen.getByText("Choose the look that feels right for you.")).toBeDefined();
+    expect(screen.queryByText("Voice")).toBeNull();
+    cleanup();
+    render(<DeviceRoute />);
     expect(screen.getByText("Voice")).toBeDefined();
     expect(screen.getByText("Video")).toBeDefined();
     expect(screen.getByText("Notifications")).toBeDefined();
+    cleanup();
+    render(<ChangelogRoute />);
     expect(screen.getAllByText("Changelog").length).toBeGreaterThan(0);
+    cleanup();
+    render(<UninstallRoute />);
     expect(screen.getByRole("button", { name: "Uninstall Cipher" })).toBeDefined();
+  });
+
+  test("uses the dedicated invitation route without retaining account credentials", async () => {
+    const requests: DesktopAuthenticationRequest[] = [];
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <SignUpForm
+          authenticate={async (request) => {
+            requests.push(request);
+            return { state: "authenticated", message: "Your account is ready." };
+          }}
+        />
+      </QueryClientProvider>,
+    );
+
+    const user = userEvent.setup({ document: browser.document as unknown as Document });
+    await user.type(screen.getByLabelText("Email or username"), "cipher.user");
+    await user.type(screen.getByLabelText("Temporary password"), "TemporaryPassphrase");
+    await user.type(screen.getByLabelText("New password"), "A much stronger password");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(requests).toEqual([
+      {
+        flow: "accept_administrator_invitation",
+        identifier: "cipher.user",
+        temporaryPassword: "TemporaryPassphrase",
+        newPassword: "A much stronger password",
+      },
+    ]);
+    expect((screen.getByLabelText("Temporary password") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("New password") as HTMLInputElement).value).toBe("");
   });
 });
