@@ -1,9 +1,13 @@
 //! HTTP routing and process startup for the Cipher server.
 
-use std::io;
+use std::{
+    io,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use axum::{
-    Json, Router,
+    Extension, Json, Router,
     extract::ws::WebSocketUpgrade,
     http::{StatusCode, Uri},
     response::{IntoResponse, Response},
@@ -11,7 +15,10 @@ use axum::{
 };
 use cipher_types::ServiceStatus;
 
-use crate::config::ServerConfig;
+use crate::{
+    auth::{AuthenticationError, RequestAuthorizer},
+    config::ServerConfig,
+};
 
 pub mod auth;
 pub mod config;
@@ -26,6 +33,19 @@ pub fn app() -> Router {
         .route("/v1/", get(api_descriptor))
         .route("/v1/realtime", get(realtime))
         .fallback(api_fallback)
+}
+
+/// Builds a router whose versioned HTTP and realtime entry points share one
+/// default-deny principal path. Health probes intentionally remain public.
+pub fn authenticated_app(authorizer: Arc<dyn RequestAuthorizer>) -> Router {
+    Router::new()
+        .route("/healthz", get(health))
+        .route("/readyz", get(readiness))
+        .route("/v1", get(authenticated_api_descriptor))
+        .route("/v1/", get(authenticated_api_descriptor))
+        .route("/v1/realtime", get(authenticated_realtime))
+        .fallback(api_fallback)
+        .layer(Extension(authorizer))
 }
 
 /// Binds the configured address and serves the Cipher API.
@@ -60,10 +80,69 @@ async fn api_descriptor() -> Response {
     )
 }
 
+async fn authenticated_api_descriptor(
+    headers: axum::http::HeaderMap,
+    Extension(authorizer): Extension<Arc<dyn RequestAuthorizer>>,
+) -> Response {
+    match authorize(&headers, authorizer.as_ref()) {
+        Ok(()) => api_descriptor().await,
+        Err(response) => response,
+    }
+}
+
 async fn realtime(upgrade: WebSocketUpgrade) -> impl IntoResponse {
     upgrade.on_upgrade(|_socket| async move {
         tracing::debug!("WebSocket connected");
     })
+}
+
+async fn authenticated_realtime(
+    headers: axum::http::HeaderMap,
+    Extension(authorizer): Extension<Arc<dyn RequestAuthorizer>>,
+    upgrade: WebSocketUpgrade,
+) -> Response {
+    match authorize(&headers, authorizer.as_ref()) {
+        Ok(()) => realtime(upgrade).await.into_response(),
+        Err(response) => response,
+    }
+}
+
+fn authorize(
+    headers: &axum::http::HeaderMap,
+    authorizer: &dyn RequestAuthorizer,
+) -> Result<(), Response> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| {
+            http_contract::failure(
+                http_contract::ApiErrorCode::Unavailable,
+                http_contract::ResponseMeta::with_request_id(http_contract::new_request_id()),
+            )
+        })?
+        .as_secs();
+    let now = i64::try_from(now).map_err(|_| {
+        http_contract::failure(
+            http_contract::ApiErrorCode::Unavailable,
+            http_contract::ResponseMeta::with_request_id(http_contract::new_request_id()),
+        )
+    })?;
+    authorizer
+        .authorize_request(headers, now)
+        .map(|_| ())
+        .map_err(|error| {
+            let code = match error {
+                AuthenticationError::SigningKeysUnavailable => {
+                    http_contract::ApiErrorCode::Unavailable
+                }
+                AuthenticationError::MissingToken
+                | AuthenticationError::InvalidToken
+                | AuthenticationError::Revoked => http_contract::ApiErrorCode::Unauthenticated,
+            };
+            http_contract::failure(
+                code,
+                http_contract::ResponseMeta::with_request_id(http_contract::new_request_id()),
+            )
+        })
 }
 
 async fn api_fallback(uri: Uri) -> Response {

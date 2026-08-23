@@ -128,6 +128,39 @@ pub fn authenticate(
     gate.authorize(identity)
 }
 
+/// Authorizes one HTTP or realtime handshake through Cipher's shared principal path.
+pub trait RequestAuthorizer: Send + Sync {
+    /// Returns the active Cipher principal or a safe rejection category.
+    fn authorize_request(
+        &self,
+        headers: &HeaderMap,
+        unix_time_seconds: i64,
+    ) -> Result<CipherPrincipal, AuthenticationError>;
+}
+
+/// Combines a token verifier with the strongly consistent Cipher state gate.
+pub struct ServerAuthorizer<V, G> {
+    validator: V,
+    gate: G,
+}
+
+impl<V, G> ServerAuthorizer<V, G> {
+    /// Creates the one authorizer shared by HTTP and realtime entry points.
+    pub fn new(validator: V, gate: G) -> Self {
+        Self { validator, gate }
+    }
+}
+
+impl<V: AccessTokenValidator, G: PrincipalGate> RequestAuthorizer for ServerAuthorizer<V, G> {
+    fn authorize_request(
+        &self,
+        headers: &HeaderMap,
+        unix_time_seconds: i64,
+    ) -> Result<CipherPrincipal, AuthenticationError> {
+        authenticate(headers, &self.validator, &self.gate, unix_time_seconds)
+    }
+}
+
 /// The fixed issuer, public client, and scopes accepted from Cognito.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CognitoTokenPolicy {

@@ -1,12 +1,18 @@
 use std::net::SocketAddr;
 
-use axum::{body::Body, http::Request};
+use std::sync::Arc;
+
+use axum::{
+    body::Body,
+    http::{HeaderMap, Request},
+};
 use http_body_util::BodyExt;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tower::ServiceExt;
 
-use super::{app, run};
+use super::{app, authenticated_app, run};
+use crate::auth::{AuthenticationError, CipherPrincipal, RequestAuthorizer, VerifiedIdentity};
 use crate::config::{AwsConfig, PublicEndpoints, ServerConfig};
 
 fn test_config(bind: SocketAddr) -> ServerConfig {
@@ -69,6 +75,32 @@ async fn readiness_endpoint_returns_ok() {
 }
 
 #[tokio::test]
+async fn authenticated_router_denies_a_missing_bearer_token_before_serving_v1() {
+    let response = authenticated_app(Arc::new(AllowOnlyKnownToken))
+        .oneshot(Request::builder().uri("/v1").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn authenticated_router_uses_the_same_principal_path_for_v1() {
+    let response = authenticated_app(Arc::new(AllowOnlyKnownToken))
+        .oneshot(
+            Request::builder()
+                .uri("/v1")
+                .header("authorization", "Bearer signed.jwt.value")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+}
+
+#[tokio::test]
 async fn realtime_endpoint_accepts_a_websocket_upgrade() {
     let reservation = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let bind = reservation.local_addr().unwrap();
@@ -116,4 +148,28 @@ async fn connect_when_ready(bind: SocketAddr) -> TcpStream {
         tokio::task::yield_now().await;
     }
     panic!("server did not bind {bind}");
+}
+
+struct AllowOnlyKnownToken;
+
+impl RequestAuthorizer for AllowOnlyKnownToken {
+    fn authorize_request(
+        &self,
+        headers: &HeaderMap,
+        _unix_time_seconds: i64,
+    ) -> Result<CipherPrincipal, AuthenticationError> {
+        if headers
+            .get("authorization")
+            .and_then(|value| value.to_str().ok())
+            != Some("Bearer signed.jwt.value")
+        {
+            return Err(AuthenticationError::InvalidToken);
+        }
+        Ok(CipherPrincipal {
+            identity: VerifiedIdentity::new("sub_123", 1_800_000_000).unwrap(),
+            user_id: "usr_123".into(),
+            device_id: "dev_123".into(),
+            session_id: "ses_123".into(),
+        })
+    }
 }
