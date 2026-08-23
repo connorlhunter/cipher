@@ -11,7 +11,7 @@ use axum::{
     extract::ws::WebSocketUpgrade,
     http::{StatusCode, Uri},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
 };
 use cipher_types::ServiceStatus;
 
@@ -49,6 +49,7 @@ pub fn authenticated_app(authorizer: Arc<dyn RequestAuthorizer>) -> Router {
         .route("/readyz", get(readiness))
         .route("/v1", get(authenticated_api_descriptor))
         .route("/v1/", get(authenticated_api_descriptor))
+        .route("/v1/session/revoke", post(authenticated_session_revoke))
         .route("/v1/realtime", get(authenticated_realtime))
         .fallback(api_fallback)
         .layer(Extension(authorizer))
@@ -99,7 +100,8 @@ async fn production_authorizer(config: &ServerConfig) -> io::Result<Arc<dyn Requ
     .map_err(|_| io::Error::other("invalid users-table configuration"))?;
     Ok(Arc::new(ServerAuthorizer::new(
         CognitoJwtValidator::new(policy, source),
-        StoredPrincipalGate::new(store),
+        StoredPrincipalGate::new(store.clone()),
+        store,
     )))
 }
 
@@ -126,7 +128,24 @@ async fn authenticated_api_descriptor(
     Extension(authorizer): Extension<Arc<dyn RequestAuthorizer>>,
 ) -> Response {
     match authorize(&headers, authorizer.as_ref()) {
-        Ok(()) => api_descriptor().await,
+        Ok(_) => api_descriptor().await,
+        Err(response) => *response,
+    }
+}
+
+/// Idempotently revokes the Cipher application session for the supplied valid
+/// Cognito access-token family. This endpoint intentionally remains available
+/// after a previous successful revocation so a desktop can safely finish an
+/// interrupted logout cleanup attempt.
+async fn authenticated_session_revoke(
+    headers: axum::http::HeaderMap,
+    Extension(authorizer): Extension<Arc<dyn RequestAuthorizer>>,
+) -> Response {
+    match revoke_current_session(&headers, authorizer.as_ref()) {
+        Ok(()) => http_contract::success(
+            SessionRevocation { revoked: true },
+            http_contract::ResponseMeta::with_request_id(http_contract::new_request_id()),
+        ),
         Err(response) => *response,
     }
 }
@@ -143,7 +162,7 @@ async fn authenticated_realtime(
     upgrade: WebSocketUpgrade,
 ) -> Response {
     match authorize(&headers, authorizer.as_ref()) {
-        Ok(()) => realtime(upgrade).await.into_response(),
+        Ok(_) => realtime(upgrade).await.into_response(),
         Err(response) => *response,
     }
 }
@@ -151,7 +170,20 @@ async fn authenticated_realtime(
 fn authorize(
     headers: &axum::http::HeaderMap,
     authorizer: &dyn RequestAuthorizer,
+) -> Result<crate::auth::CipherPrincipal, Box<Response>> {
+    with_authorization_time(|now| authorizer.authorize_request(headers, now))
+}
+
+fn revoke_current_session(
+    headers: &axum::http::HeaderMap,
+    authorizer: &dyn RequestAuthorizer,
 ) -> Result<(), Box<Response>> {
+    with_authorization_time(|now| authorizer.revoke_current_session(headers, now))
+}
+
+fn with_authorization_time<T>(
+    action: impl FnOnce(i64) -> Result<T, AuthenticationError>,
+) -> Result<T, Box<Response>> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| {
@@ -167,23 +199,18 @@ fn authorize(
             http_contract::ResponseMeta::with_request_id(http_contract::new_request_id()),
         ))
     })?;
-    authorizer
-        .authorize_request(headers, now)
-        .map(|_| ())
-        .map_err(|error| {
-            let code = match error {
-                AuthenticationError::SigningKeysUnavailable => {
-                    http_contract::ApiErrorCode::Unavailable
-                }
-                AuthenticationError::MissingToken
-                | AuthenticationError::InvalidToken
-                | AuthenticationError::Revoked => http_contract::ApiErrorCode::Unauthenticated,
-            };
-            Box::new(http_contract::failure(
-                code,
-                http_contract::ResponseMeta::with_request_id(http_contract::new_request_id()),
-            ))
-        })
+    action(now).map_err(|error| {
+        let code = match error {
+            AuthenticationError::SigningKeysUnavailable => http_contract::ApiErrorCode::Unavailable,
+            AuthenticationError::MissingToken
+            | AuthenticationError::InvalidToken
+            | AuthenticationError::Revoked => http_contract::ApiErrorCode::Unauthenticated,
+        };
+        Box::new(http_contract::failure(
+            code,
+            http_contract::ResponseMeta::with_request_id(http_contract::new_request_id()),
+        ))
+    })
 }
 
 async fn api_fallback(uri: Uri) -> Response {
@@ -214,6 +241,11 @@ struct ApiDescriptor {
     api_version: &'static str,
     #[serde(rename = "mediaType")]
     media_type: &'static str,
+}
+
+#[derive(serde::Serialize)]
+struct SessionRevocation {
+    revoked: bool,
 }
 
 #[cfg(test)]

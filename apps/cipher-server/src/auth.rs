@@ -101,6 +101,15 @@ pub trait PrincipalGate: Send + Sync {
     -> Result<CipherPrincipal, AuthenticationError>;
 }
 
+/// Revokes the application session identified by one verified Cognito token family.
+///
+/// This operation is intentionally idempotent: a retry after an interrupted
+/// response must be able to confirm that local cleanup can be discarded.
+pub trait SessionRevoker: Send + Sync {
+    /// Revokes the Cipher application session for one validated token family.
+    fn revoke_session(&self, identity: &VerifiedIdentity) -> Result<(), AuthenticationError>;
+}
+
 /// One atomically read application authorization record.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PrincipalState {
@@ -259,6 +268,33 @@ impl ConsistentPrincipalStore for DynamoPrincipalStore {
     }
 }
 
+impl SessionRevoker for DynamoPrincipalStore {
+    fn revoke_session(&self, identity: &VerifiedIdentity) -> Result<(), AuthenticationError> {
+        let identity_item = dynamo_get(
+            &self.client,
+            &self.users_table,
+            format!("IDENTITY#COGNITO#{}", identity.subject()),
+            "CLAIM".into(),
+        )?;
+        let Some(identity_item) = identity_item else {
+            return Ok(());
+        };
+        let Some(user_id) = string_attribute(&identity_item, "user_id") else {
+            return Ok(());
+        };
+        if !opaque_identifier(user_id, "usr_") {
+            return Ok(());
+        }
+
+        dynamo_revoke_session(
+            &self.client,
+            &self.users_table,
+            user_id,
+            identity.session_family(),
+        )
+    }
+}
+
 fn dynamo_get(
     client: &DynamoDbClient,
     table: &str,
@@ -280,6 +316,44 @@ fn dynamo_get(
     })
     .map_err(|_| AuthenticationError::SigningKeysUnavailable)
     .map(|response| response.item)
+}
+
+fn dynamo_revoke_session(
+    client: &DynamoDbClient,
+    table: &str,
+    user_id: &str,
+    session_family: &str,
+) -> Result<(), AuthenticationError> {
+    let result = tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async {
+            client
+                .update_item()
+                .table_name(table)
+                .key("pk", AttributeValue::S(format!("USER#{user_id}")))
+                .key("sk", AttributeValue::S(format!("SESSION#{session_family}")))
+                .update_expression("SET #status = :revoked")
+                .condition_expression("attribute_exists(pk) AND attribute_exists(sk)")
+                .expression_attribute_names("#status", "status")
+                .expression_attribute_values(":revoked", AttributeValue::S("revoked".into()))
+                .send()
+                .await
+                .map_err(Box::new)
+        })
+    });
+    match result {
+        Ok(_) => Ok(()),
+        Err(error)
+            if error
+                .as_service_error()
+                .is_some_and(|service| service.is_conditional_check_failed_exception()) =>
+        {
+            // The record is already absent or has already been revoked. Neither
+            // outcome can restore access, so treating it as complete keeps this
+            // client retry operation safe and idempotent.
+            Ok(())
+        }
+        Err(_) => Err(AuthenticationError::SigningKeysUnavailable),
+    }
 }
 
 fn string_attribute<'a>(
@@ -342,28 +416,56 @@ pub trait RequestAuthorizer: Send + Sync {
         headers: &HeaderMap,
         unix_time_seconds: i64,
     ) -> Result<CipherPrincipal, AuthenticationError>;
+
+    /// Revokes the application session identified by a valid Cognito access token.
+    ///
+    /// Unlike normal request authorization, this must remain retryable once the
+    /// session was marked revoked. It validates token ownership and then applies
+    /// an idempotent state transition.
+    fn revoke_current_session(
+        &self,
+        headers: &HeaderMap,
+        unix_time_seconds: i64,
+    ) -> Result<(), AuthenticationError>;
 }
 
 /// Combines a token verifier with the strongly consistent Cipher state gate.
-pub struct ServerAuthorizer<V, G> {
+pub struct ServerAuthorizer<V, G, R> {
     validator: V,
     gate: G,
+    revoker: R,
 }
 
-impl<V, G> ServerAuthorizer<V, G> {
+impl<V, G, R> ServerAuthorizer<V, G, R> {
     /// Creates the one authorizer shared by HTTP and realtime entry points.
-    pub fn new(validator: V, gate: G) -> Self {
-        Self { validator, gate }
+    pub fn new(validator: V, gate: G, revoker: R) -> Self {
+        Self {
+            validator,
+            gate,
+            revoker,
+        }
     }
 }
 
-impl<V: AccessTokenValidator, G: PrincipalGate> RequestAuthorizer for ServerAuthorizer<V, G> {
+impl<V: AccessTokenValidator, G: PrincipalGate, R: SessionRevoker> RequestAuthorizer
+    for ServerAuthorizer<V, G, R>
+{
     fn authorize_request(
         &self,
         headers: &HeaderMap,
         unix_time_seconds: i64,
     ) -> Result<CipherPrincipal, AuthenticationError> {
         authenticate(headers, &self.validator, &self.gate, unix_time_seconds)
+    }
+
+    fn revoke_current_session(
+        &self,
+        headers: &HeaderMap,
+        unix_time_seconds: i64,
+    ) -> Result<(), AuthenticationError> {
+        let token = bearer_token(headers)?;
+        let identity = self.validator.validate(token, unix_time_seconds)?;
+        self.revoker.revoke_session(&identity)
     }
 }
 

@@ -101,6 +101,48 @@ async fn authenticated_router_uses_the_same_principal_path_for_v1() {
 }
 
 #[tokio::test]
+async fn authenticated_router_revokes_the_current_session_idempotently() {
+    let response = authenticated_app(Arc::new(AllowOnlyKnownToken))
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/session/revoke")
+                .header("authorization", "Bearer signed.jwt.value")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body["data"]["revoked"], true);
+    assert_eq!(body["meta"]["apiVersion"], "v1");
+    assert!(
+        body["meta"]["requestId"]
+            .as_str()
+            .is_some_and(|request_id| request_id.starts_with("req_"))
+    );
+}
+
+#[tokio::test]
+async fn session_revocation_requires_the_same_valid_bearer_token() {
+    let response = authenticated_app(Arc::new(AllowOnlyKnownToken))
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/session/revoke")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn realtime_endpoint_accepts_a_websocket_upgrade() {
     let reservation = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let bind = reservation.local_addr().unwrap();
@@ -206,5 +248,14 @@ impl RequestAuthorizer for AllowOnlyKnownToken {
             device_id: "dev_123".into(),
             session_id: "ses_123".into(),
         })
+    }
+
+    fn revoke_current_session(
+        &self,
+        headers: &HeaderMap,
+        unix_time_seconds: i64,
+    ) -> Result<(), AuthenticationError> {
+        self.authorize_request(headers, unix_time_seconds)
+            .map(|_| ())
     }
 }
