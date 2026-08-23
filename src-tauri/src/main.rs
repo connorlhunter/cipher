@@ -2,6 +2,7 @@
 
 use tauri::Manager;
 
+pub mod cognito;
 pub mod credential_store;
 pub mod transport;
 
