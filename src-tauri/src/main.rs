@@ -4,6 +4,7 @@ use tauri::Manager;
 
 pub mod cognito;
 pub mod credential_store;
+pub mod session;
 pub mod transport;
 
 mod ipc;
@@ -34,6 +35,7 @@ fn main() {
 
     let app = builder
         .manage(lifecycle::DesktopLifecycleService::new())
+        .manage(session::DesktopSessionService::new())
         .setup(|app| {
             let main_window = app
                 .config()
@@ -57,6 +59,18 @@ fn main() {
                 .map_err(|_| {
                     tauri::Error::AssetNotFound("desktop lifecycle initialization".into())
                 })?;
+
+            let lifecycle = app.state::<lifecycle::DesktopLifecycleService>();
+            let restoration = lifecycle
+                .begin_native_operation(lifecycle::NativeOperationKind::Authentication)
+                .map_err(|_| tauri::Error::AssetNotFound("desktop session restoration".into()))?;
+            let cancellation = restoration.cancellation();
+            let _ = app
+                .state::<session::DesktopSessionService>()
+                .restore_on_startup(&cancellation);
+            lifecycle
+                .finish_native_operation(restoration)
+                .map_err(|_| tauri::Error::AssetNotFound("desktop session restoration".into()))?;
 
             Ok(())
         })
