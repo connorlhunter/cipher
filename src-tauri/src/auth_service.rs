@@ -16,8 +16,8 @@ use reqwest::blocking::Client;
 use crate::{
     auth::{
         AuthenticationRequest, AuthenticationView, AuthenticationViewState, AwsCognitoProvider,
-        CognitoProvider, NativeAuthError, NativeAuthErrorCode, NativeAuthOutcome,
-        NativeCognitoAuthenticator,
+        CognitoChallengeStep, CognitoProvider, NativeAuthError, NativeAuthErrorCode,
+        NativeAuthOutcome, NativeCognitoAuthenticator,
     },
     cognito::{CognitoAccessTokenValidator, CognitoTokenPolicy, JwksSource, JwksSourceError},
     credential_store::SecretBytes,
@@ -222,6 +222,7 @@ impl SessionRefresher for CognitoSessionRefresher {
 /// Owns the native sign-in boundary and keeps unavailable configuration fail-closed.
 pub struct DesktopAuthenticationService {
     runtime: Result<AuthenticationRuntime, NativeAuthError>,
+    pending_challenge: Mutex<Option<CognitoChallengeStep>>,
 }
 
 impl DesktopAuthenticationService {
@@ -230,6 +231,7 @@ impl DesktopAuthenticationService {
         Self {
             runtime: CognitoDesktopConfiguration::from_environment()
                 .and_then(AuthenticationRuntime::new),
+            pending_challenge: Mutex::new(None),
         }
     }
 
@@ -262,19 +264,55 @@ impl DesktopAuthenticationService {
         if let Err(error) = self.install_refresher(session, cancellation) {
             return failure(error);
         }
-        let outcome = match runtime
-            .authenticator
-            .authenticate(request, cancellation)
-            .await
-        {
+        let result = match request {
+            AuthenticationRequest::ContinueChallenge { code } => {
+                let challenge = match self.pending_challenge.lock() {
+                    Ok(mut pending) => pending.take(),
+                    Err(_) => return failure(unavailable()),
+                };
+                let Some(challenge) = challenge else {
+                    return failure(NativeAuthError::new(NativeAuthErrorCode::InvalidRequest));
+                };
+                let result = runtime
+                    .authenticator
+                    .continue_challenge(&challenge, code, cancellation)
+                    .await;
+                if result.is_err()
+                    && let Ok(mut pending) = self.pending_challenge.lock()
+                    && pending.is_none()
+                {
+                    *pending = Some(challenge);
+                }
+                result
+            }
+            _ => {
+                runtime
+                    .authenticator
+                    .authenticate(request, cancellation)
+                    .await
+            }
+        };
+        let outcome = match result {
             Ok(outcome) => outcome,
             Err(error) => return failure(error),
         };
-        let NativeAuthOutcome::Authenticated(tokens) = outcome else {
-            return AuthenticationView {
-                state: AuthenticationViewState::ChallengeRequired,
-                message: "Additional verification is required to continue.",
-            };
+        let tokens = match outcome {
+            NativeAuthOutcome::Authenticated(tokens) => {
+                if let Ok(mut pending) = self.pending_challenge.lock() {
+                    *pending = None;
+                }
+                tokens
+            }
+            NativeAuthOutcome::Challenge(challenge) => {
+                let Ok(mut pending) = self.pending_challenge.lock() else {
+                    return failure(unavailable());
+                };
+                *pending = Some(challenge);
+                return AuthenticationView {
+                    state: AuthenticationViewState::ChallengeRequired,
+                    message: "Enter the verification code to continue.",
+                };
+            }
         };
 
         let now = match unix_time_seconds() {
