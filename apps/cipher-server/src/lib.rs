@@ -13,6 +13,7 @@ use cipher_types::ServiceStatus;
 
 use crate::config::ServerConfig;
 
+pub mod auth;
 pub mod config;
 pub mod http_contract;
 
