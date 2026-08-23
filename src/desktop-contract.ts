@@ -18,6 +18,7 @@ export const desktopCommands = {
   theme: "desktop_theme",
   setTheme: "desktop_set_theme",
   authenticate: "desktop_authenticate",
+  removeCipher: "desktop_remove_cipher",
 } as const;
 
 /** The largest display-only status message accepted from the native core. */
@@ -36,6 +37,11 @@ export interface DesktopAuthenticationView {
     | "password_reset_required"
     | "password_reset_complete"
     | "failed";
+  message: string;
+}
+
+/** A bounded acknowledgement that the native platform removal flow has started. */
+export interface DesktopRemovalView {
   message: string;
 }
 
@@ -160,6 +166,20 @@ export function parseDesktopAuthenticationView(value: unknown): DesktopAuthentic
     .safeParse(value);
   if (!result.success) {
     throw new Error("The desktop core returned an invalid authentication result.");
+  }
+  return Object.freeze({ ...result.data });
+}
+
+/** Validates a display-safe native removal acknowledgement before React renders it. */
+export function parseDesktopRemovalView(value: unknown): DesktopRemovalView {
+  const result = z
+    .object({
+      message: z.string().min(1).max(maxDesktopStatusMessageLength),
+    })
+    .strict()
+    .safeParse(value);
+  if (!result.success) {
+    throw new Error("The desktop core returned an invalid removal result.");
   }
   return Object.freeze({ ...result.data });
 }

@@ -249,6 +249,27 @@ impl DesktopThemeService {
         self.resolve(app, preference)
     }
 
+    /// Removes the native appearance preference before the application is removed.
+    pub fn remove_local_preference(&self) -> Result<(), ipc::IpcError> {
+        let config_path = self
+            .config_path
+            .lock()
+            .map_err(|_| ipc::IpcError::unavailable())?
+            .clone();
+        if let Some(config_path) = config_path {
+            match fs::remove_file(config_path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => return Err(ipc::IpcError::unavailable()),
+            }
+        }
+        *self
+            .preference
+            .lock()
+            .map_err(|_| ipc::IpcError::unavailable())? = DesktopThemePreference::System;
+        Ok(())
+    }
+
     fn follows_system(&self) -> bool {
         self.preference
             .lock()
@@ -563,6 +584,25 @@ mod tests {
         assert_eq!(rose.resolved, ResolvedDesktopTheme::Light);
         assert_eq!(read_preference(&config_path), DesktopThemePreference::Rose);
         assert!(service.current(&handle, Some(0)).is_err());
+    }
+
+    #[test]
+    fn device_removal_discards_the_native_appearance_preference() {
+        let app = managed_mock_app(Some(Theme::Light));
+        let service = app.state::<DesktopThemeService>();
+        let directory = tempfile::tempdir().unwrap();
+        let config_path = directory.path().join("appearance.json");
+        *service.config_path.lock().unwrap() = Some(config_path.clone());
+        write_preference(&config_path, DesktopThemePreference::Onyx).unwrap();
+        *service.preference.lock().unwrap() = DesktopThemePreference::Onyx;
+
+        service.remove_local_preference().unwrap();
+
+        assert!(!config_path.exists());
+        assert_eq!(
+            *service.preference.lock().unwrap(),
+            DesktopThemePreference::System
+        );
     }
 
     #[test]

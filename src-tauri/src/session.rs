@@ -963,6 +963,37 @@ impl DesktopSessionService {
         }
     }
 
+    /// Removes the committed local session and its native credentials before device removal.
+    ///
+    /// This is native-only: the webview cannot name account scopes or credential entries.
+    pub fn remove_local_state(&self) -> Result<(), NativeSessionError> {
+        let _transition = self
+            .transition
+            .lock()
+            .map_err(|_| NativeSessionError::Unavailable)?;
+        let store = self.store.clone().ok_or(NativeSessionError::Unavailable)?;
+        let supported_session = SupportedSession::load_committed(store.as_ref())?;
+        let manager = {
+            let mut runtime = self
+                .runtime
+                .lock()
+                .map_err(|_| NativeSessionError::Unavailable)?;
+            runtime.startup_restore_pending = false;
+            runtime.manager.take()
+        };
+        if let Some(manager) = manager {
+            manager.cancel_active_refresh_and_wait()?;
+        }
+        if let Some(supported_session) = supported_session {
+            store
+                .delete_scope(&supported_session.scope)
+                .map_err(map_credential_error)?;
+        }
+        store
+            .delete(&active_session_entry())
+            .map_err(map_credential_error)
+    }
+
     fn complete_startup_restore(
         &self,
         manager: Arc<ManagedDesktopSession>,
@@ -1887,6 +1918,25 @@ mod tests {
         assert_eq!(store.value(&refresh_entry()), None);
         assert_eq!(store.value(&active_session_entry()), None);
         assert_eq!(service.state(), NativeSessionState::Empty);
+    }
+
+    #[test]
+    fn device_removal_clears_the_committed_session_and_native_credentials() {
+        let store = Arc::new(MemoryCredentialStore::default());
+        let service = DesktopSessionService::with_store(store.clone());
+        service
+            .establish(
+                supported_session(),
+                grant(Duration::from_secs(60)),
+                &OperationCancellation::default(),
+            )
+            .unwrap();
+
+        service.remove_local_state().unwrap();
+
+        assert_eq!(service.state(), NativeSessionState::Empty);
+        assert_eq!(store.value(&refresh_entry()), None);
+        assert_eq!(store.value(&active_session_entry()), None);
     }
 
     #[test]

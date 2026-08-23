@@ -5,11 +5,13 @@ import {
   desktopThemeChangedEvent,
   desktopProtocol,
   parseDesktopAuthenticationView,
+  parseDesktopRemovalView,
   parseDesktopDiagnostics,
   parseDesktopStatus,
   parseDesktopTheme,
   type DesktopDiagnostics,
   type DesktopAuthenticationView,
+  type DesktopRemovalView,
   type DesktopStatus,
   type DesktopTheme,
   type DesktopThemePreference,
@@ -24,10 +26,12 @@ import {
 export {
   parseDesktopDiagnostics,
   parseDesktopAuthenticationView,
+  parseDesktopRemovalView,
   parseDesktopStatus,
   parseDesktopTheme,
   type DesktopDiagnostics,
   type DesktopAuthenticationView,
+  type DesktopRemovalView,
   type DesktopStatus,
   type DesktopTheme,
   type DesktopThemePreference,
@@ -67,6 +71,16 @@ export async function desktopAuthenticate(
   return desktopAuthenticateWith(
     (command, arguments_) => invoke<unknown>(command, arguments_),
     request,
+  );
+}
+
+/** Starts the native removal handoff without exposing platform paths to the webview. */
+export async function desktopRemoveCipher(removeLocalData: boolean): Promise<DesktopRemovalView> {
+  return parseDesktopRemovalView(
+    await invoke<unknown>(desktopCommands.removeCipher, {
+      request: { removeLocalData },
+      protocolVersion: desktopProtocol.current,
+    }),
   );
 }
 

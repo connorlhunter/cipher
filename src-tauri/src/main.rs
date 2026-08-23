@@ -11,6 +11,7 @@ pub mod auth_service;
 pub mod auth_service;
 pub mod cognito;
 pub mod credential_store;
+pub mod removal;
 pub mod session;
 pub mod theme;
 pub mod transport;
@@ -78,6 +79,30 @@ async fn desktop_authenticate(
     Ok(view)
 }
 
+/// Clears selected native state and opens the installed platform removal flow.
+#[tauri::command]
+fn desktop_remove_cipher<R: tauri::Runtime>(
+    request: removal::DesktopRemovalRequest,
+    protocol_version: Option<u16>,
+    app: tauri::AppHandle<R>,
+    session: tauri::State<'_, session::DesktopSessionService>,
+    theme: tauri::State<'_, theme::DesktopThemeService>,
+) -> Result<removal::DesktopRemovalView, ipc::IpcError> {
+    ipc::require_current_protocol_version(protocol_version)?;
+    let plan = removal::installed_removal_plan().map_err(|_| ipc::IpcError::unavailable())?;
+    if request.remove_local_data {
+        session
+            .remove_local_state()
+            .map_err(|_| ipc::IpcError::unavailable())?;
+        theme.remove_local_preference()?;
+    }
+    removal::schedule_removal(plan).map_err(|_| ipc::IpcError::unavailable())?;
+    app.exit(0);
+    Ok(removal::DesktopRemovalView {
+        message: "Cipher is closing to remove this installation.",
+    })
+}
+
 fn main() {
     let builder = tauri::Builder::default();
     #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -142,7 +167,8 @@ fn main() {
             desktop_diagnostics,
             desktop_theme,
             desktop_set_theme,
-            desktop_authenticate
+            desktop_authenticate,
+            desktop_remove_cipher
         ])
         .build(tauri::generate_context!())
         .expect("Cipher desktop failed to start");

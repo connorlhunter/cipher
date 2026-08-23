@@ -12,6 +12,7 @@ import { DesktopShell } from "../app/desktop-shell";
 import { Badge } from "../components/ui/badge";
 import { buttonVariants } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { DeviceSettings } from "../features/settings/device-settings";
 import { ThemePreferenceControl } from "../features/theme/theme-preference-control";
 import { PasswordResetForm, SignInForm } from "../features/auth/sign-in-form";
 import { cn } from "../lib/utils";
@@ -111,6 +112,7 @@ export function AppearanceRoute(): JSX.Element {
           <ThemePreferenceControl />
         </div>
       </Card>
+      <DeviceSettings />
     </section>
   );
 }

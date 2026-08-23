@@ -384,5 +384,10 @@ describe("desktop shell accessibility", () => {
       </ThemeProvider>,
     );
     expect(screen.getByText("Choose the look that feels right for you.")).toBeDefined();
+    expect(screen.getByText("Voice")).toBeDefined();
+    expect(screen.getByText("Video")).toBeDefined();
+    expect(screen.getByText("Notifications")).toBeDefined();
+    expect(screen.getAllByText("Changelog").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Uninstall Cipher" })).toBeDefined();
   });
 });
