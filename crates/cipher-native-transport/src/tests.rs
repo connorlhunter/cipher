@@ -500,6 +500,28 @@ fn native_http_client_authenticates_and_dispatches_without_ipc_data() {
 }
 
 #[test]
+fn access_token_clone_stays_redacted_and_has_no_serialization_surface() {
+    let token = AccessToken::new(ACCESS_TOKEN.into()).unwrap();
+    let cloned = token.clone();
+
+    assert!(!format!("{token:?}").contains(ACCESS_TOKEN));
+    assert!(!format!("{cloned:?}").contains(ACCESS_TOKEN));
+    assert_eq!(token.as_str(), ACCESS_TOKEN);
+    assert_eq!(cloned.as_str(), ACCESS_TOKEN);
+
+    let source = include_str!("lib.rs");
+    let start = source.find("/// A non-serializable access token").unwrap();
+    let end = source
+        .find("/// Supplies an in-memory access token")
+        .unwrap();
+    let token_surface = &source[start..end];
+    assert!(token_surface.contains("Zeroizing<String>"));
+    assert!(!token_surface.contains("pub struct AccessToken(String)"));
+    assert!(!token_surface.contains("serde"));
+    assert!(!token_surface.contains("Serialize"));
+}
+
+#[test]
 fn native_http_client_obeys_cancellation_and_missing_session() {
     let record = Rc::new(RefCell::new(HttpRecord::default()));
     let response = NativeHttpResponse::new(200, Vec::new()).unwrap();

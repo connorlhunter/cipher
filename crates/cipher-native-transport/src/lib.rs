@@ -14,6 +14,7 @@ use std::{
     },
     time::Duration,
 };
+use zeroize::Zeroizing;
 
 use cipher_realtime_protocol::{
     ClientFrame, MAX_SUBSCRIPTION_CONVERSATIONS, RealtimeCommand, RealtimeEvent,
@@ -146,7 +147,8 @@ impl OperationCancellation {
 }
 
 /// A non-serializable access token held only by native Rust code.
-pub struct AccessToken(String);
+#[derive(Clone)]
+pub struct AccessToken(Zeroizing<String>);
 
 impl AccessToken {
     /// Creates a token after native authentication validates its bounded wire value.
@@ -162,7 +164,7 @@ impl AccessToken {
             ));
         }
 
-        Ok(Self(value))
+        Ok(Self(Zeroizing::new(value)))
     }
 
     fn as_str(&self) -> &str {

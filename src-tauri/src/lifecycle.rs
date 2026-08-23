@@ -9,7 +9,7 @@ use cipher_desktop_lifecycle::{
 use cipher_native_transport::OperationCancellation;
 use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime};
 
-use crate::{ipc, security::MAIN_WINDOW_LABEL};
+use crate::{ipc, security::MAIN_WINDOW_LABEL, session::DesktopSessionService};
 
 /// Renderer event emitted after native logout cleanup.
 pub const RENDERER_LOGOUT_EVENT: &str = "cipher://renderer-data/logout";
@@ -163,6 +163,13 @@ impl DesktopLifecycleService {
         event: DesktopLifecycleEvent,
     ) -> Result<(), ipc::IpcError> {
         let transition = self.transition(event)?;
+        if transition
+            .actions()
+            .contains(&DesktopLifecycleAction::CancelOperations)
+            && let Some(session) = app.try_state::<DesktopSessionService>()
+        {
+            session.cancel_active_refresh();
+        }
         if transition
             .actions()
             .contains(&DesktopLifecycleAction::LockAndPurgeRenderer)

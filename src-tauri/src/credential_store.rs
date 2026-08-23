@@ -18,6 +18,7 @@ const LEGACY_SCHEMA_VERSION: u8 = 0;
 const RECORD_HEADER_BYTES: usize = RECORD_MAGIC.len() + 1 + 1 + 4;
 const MAX_SCOPE_REFERENCE_BYTES: usize = 512;
 const MAX_REFRESH_MATERIAL_BYTES: usize = 8 * 1024;
+const SESSION_SCOPE_BYTES: usize = 32;
 
 /// The required byte length of a local-state wrapping key.
 pub const LOCAL_STATE_WRAPPING_KEY_BYTES: usize = 32;
@@ -29,6 +30,8 @@ pub enum CredentialKind {
     RefreshMaterial,
     /// The 256-bit key that wraps local encrypted state for one account scope.
     LocalStateWrappingKey,
+    /// The opaque account scope for the last fully committed native session.
+    ActiveSessionScope,
 }
 
 impl CredentialKind {
@@ -36,6 +39,7 @@ impl CredentialKind {
         match self {
             Self::RefreshMaterial => 1,
             Self::LocalStateWrappingKey => 2,
+            Self::ActiveSessionScope => 3,
         }
     }
 
@@ -43,6 +47,7 @@ impl CredentialKind {
         match self {
             Self::RefreshMaterial => "refresh",
             Self::LocalStateWrappingKey => "wrapping-key",
+            Self::ActiveSessionScope => "active-session",
         }
     }
 
@@ -50,6 +55,7 @@ impl CredentialKind {
         match self {
             Self::RefreshMaterial => !bytes.is_empty() && bytes.len() <= MAX_REFRESH_MATERIAL_BYTES,
             Self::LocalStateWrappingKey => bytes.len() == LOCAL_STATE_WRAPPING_KEY_BYTES,
+            Self::ActiveSessionScope => bytes.len() == SESSION_SCOPE_BYTES,
         }
     }
 }
@@ -84,6 +90,14 @@ impl CredentialScope {
             kind,
             scope: self.clone(),
         }
+    }
+
+    pub(crate) const fn from_digest(digest: [u8; SESSION_SCOPE_BYTES]) -> Self {
+        Self(digest)
+    }
+
+    pub(crate) const fn digest(&self) -> &[u8; SESSION_SCOPE_BYTES] {
+        &self.0
     }
 }
 
@@ -240,7 +254,9 @@ pub trait CredentialStore: Send + Sync {
     /// Loads the current-schema credential for an entry.
     fn load(&self, entry: &CredentialEntry) -> Result<Option<SecretBytes>, CredentialStoreError>;
 
-    /// Replaces the current-schema value and removes a matching legacy native item.
+    /// Transactionally replaces the current-schema value and removes a matching legacy item.
+    ///
+    /// An error leaves the previous current value in place when rollback succeeds.
     fn replace(
         &self,
         entry: &CredentialEntry,
@@ -254,7 +270,7 @@ pub trait CredentialStore: Send + Sync {
     /// Idempotently removes the current and legacy native items for one entry.
     fn delete(&self, entry: &CredentialEntry) -> Result<(), CredentialStoreError>;
 
-    /// Idempotently removes both credential kinds, including any legacy native items.
+    /// Idempotently removes every credential kind, including any legacy native items.
     fn delete_scope(&self, scope: &CredentialScope) -> Result<(), CredentialStoreError>;
 }
 
@@ -316,10 +332,15 @@ impl CredentialStore for PlatformCredentialStore {
     ) -> Result<(), CredentialStoreError> {
         let record = encode_current_record(entry.kind, secret.as_bytes())?;
         self.with_backend(|backend| {
+            let previous = load_location(backend, &entry.current_location())?;
             backend
                 .replace(&entry.current_location(), record.as_slice())
                 .map_err(map_native_error)?;
-            delete_location(backend, &entry.legacy_location())
+            if let Err(error) = delete_location(backend, &entry.legacy_location()) {
+                rollback_current(backend, entry, previous.as_deref().map(Vec::as_slice))?;
+                return Err(error);
+            }
+            Ok(())
         })
     }
 
@@ -340,7 +361,10 @@ impl CredentialStore for PlatformCredentialStore {
             backend
                 .replace(&entry.current_location(), record.as_slice())
                 .map_err(map_native_error)?;
-            delete_location(backend, &entry.legacy_location())?;
+            if let Err(error) = delete_location(backend, &entry.legacy_location()) {
+                rollback_current(backend, entry, None)?;
+                return Err(error);
+            }
             Ok(CredentialMigration::Migrated)
         })
     }
@@ -359,6 +383,7 @@ impl CredentialStore for PlatformCredentialStore {
             for kind in [
                 CredentialKind::RefreshMaterial,
                 CredentialKind::LocalStateWrappingKey,
+                CredentialKind::ActiveSessionScope,
             ] {
                 let entry = scope.entry(kind);
                 for location in [entry.current_location(), entry.legacy_location()] {
@@ -458,6 +483,19 @@ fn delete_location(
     match backend.delete(location) {
         Ok(()) | Err(NativeCredentialError::NotFound) => Ok(()),
         Err(error) => Err(map_native_error(error)),
+    }
+}
+
+fn rollback_current(
+    backend: &dyn NativeCredentialBackend,
+    entry: &CredentialEntry,
+    previous: Option<&[u8]>,
+) -> Result<(), CredentialStoreError> {
+    match previous {
+        Some(previous) => backend
+            .replace(&entry.current_location(), previous)
+            .map_err(map_native_error),
+        None => delete_location(backend, &entry.current_location()),
     }
 }
 
@@ -771,8 +809,8 @@ mod tests {
         CURRENT_SCHEMA_VERSION, CredentialEntry, CredentialKind, CredentialMigration,
         CredentialScope, CredentialScopeError, CredentialStore, CredentialStoreError,
         CredentialStorePlatform, LOCAL_STATE_WRAPPING_KEY_BYTES, NativeCredentialBackend,
-        NativeCredentialError, NativeCredentialLocation, PlatformCredentialStore, SecretBytes,
-        decode_current_record, encode_current_record,
+        NativeCredentialError, NativeCredentialLocation, PlatformCredentialStore,
+        SESSION_SCOPE_BYTES, SecretBytes, decode_current_record, encode_current_record,
     };
 
     #[derive(Clone, Default)]
@@ -964,6 +1002,7 @@ mod tests {
         let (store, _) = test_store();
         let refresh = test_entry(CredentialKind::RefreshMaterial);
         let wrapping_key = test_entry(CredentialKind::LocalStateWrappingKey);
+        let active_session = test_entry(CredentialKind::ActiveSessionScope);
 
         assert_eq!(
             store.replace(&refresh, &SecretBytes::new(Vec::new())),
@@ -980,6 +1019,19 @@ mod tests {
             .replace(
                 &wrapping_key,
                 &SecretBytes::new(vec![0; LOCAL_STATE_WRAPPING_KEY_BYTES]),
+            )
+            .unwrap();
+        assert_eq!(
+            store.replace(
+                &active_session,
+                &SecretBytes::new(vec![0; SESSION_SCOPE_BYTES - 1])
+            ),
+            Err(CredentialStoreError::InvalidSecret)
+        );
+        store
+            .replace(
+                &active_session,
+                &SecretBytes::new(vec![0; SESSION_SCOPE_BYTES]),
             )
             .unwrap();
     }
@@ -1077,9 +1129,12 @@ mod tests {
     }
 
     #[test]
-    fn replacement_reports_legacy_cleanup_errors_after_writing_current_data() {
+    fn replacement_rolls_back_when_legacy_cleanup_fails() {
         let (store, backend) = test_store();
         let entry = test_entry(CredentialKind::RefreshMaterial);
+        store
+            .replace(&entry, &SecretBytes::new(b"previous-refresh".to_vec()))
+            .unwrap();
         backend.seed(entry.legacy_location(), b"older-refresh".to_vec());
         backend.fail_once(MemoryOperation::Delete, NativeCredentialError::AccessDenied);
 
@@ -1089,9 +1144,27 @@ mod tests {
         );
         assert_eq!(
             store.load(&entry).unwrap().unwrap().as_bytes(),
-            b"current-refresh"
+            b"previous-refresh"
         );
         assert!(backend.value(entry.legacy_location()).is_some());
+    }
+
+    #[test]
+    fn migration_rolls_back_current_data_when_legacy_cleanup_fails() {
+        let (store, backend) = test_store();
+        let entry = test_entry(CredentialKind::RefreshMaterial);
+        backend.seed(entry.legacy_location(), b"older-refresh".to_vec());
+        backend.fail_once(MemoryOperation::Delete, NativeCredentialError::AccessDenied);
+
+        assert_eq!(
+            store.migrate(&entry),
+            Err(CredentialStoreError::AccessDenied)
+        );
+        assert_eq!(backend.value(entry.current_location()), None);
+        assert_eq!(
+            backend.value(entry.legacy_location()),
+            Some(b"older-refresh".to_vec())
+        );
     }
 
     #[test]
@@ -1115,6 +1188,7 @@ mod tests {
         let scope = CredentialScope::new("scope-to-delete").unwrap();
         let refresh = scope.entry(CredentialKind::RefreshMaterial);
         let wrapping_key = scope.entry(CredentialKind::LocalStateWrappingKey);
+        let active_session = scope.entry(CredentialKind::ActiveSessionScope);
 
         store
             .replace(&refresh, &SecretBytes::new(b"current-refresh".to_vec()))
@@ -1125,6 +1199,12 @@ mod tests {
                 &SecretBytes::new(vec![0; LOCAL_STATE_WRAPPING_KEY_BYTES]),
             )
             .unwrap();
+        store
+            .replace(
+                &active_session,
+                &SecretBytes::new(vec![0; SESSION_SCOPE_BYTES]),
+            )
+            .unwrap();
         backend.seed(refresh.legacy_location(), b"older-refresh".to_vec());
         backend.seed(
             wrapping_key.legacy_location(),
@@ -1133,7 +1213,7 @@ mod tests {
 
         store.delete_scope(&scope).unwrap();
         store.delete_scope(&scope).unwrap();
-        for entry in [refresh, wrapping_key] {
+        for entry in [refresh, wrapping_key, active_session] {
             assert_eq!(backend.value(entry.current_location()), None);
             assert_eq!(backend.value(entry.legacy_location()), None);
         }
