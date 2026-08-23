@@ -17,6 +17,7 @@ export const desktopCommands = {
   diagnostics: "desktop_diagnostics",
   theme: "desktop_theme",
   setTheme: "desktop_set_theme",
+  authenticate: "desktop_authenticate",
 } as const;
 
 /** The largest display-only status message accepted from the native core. */
@@ -24,6 +25,12 @@ export const maxDesktopStatusMessageLength = 160;
 
 /** A bounded, display-only native-core status view. */
 export interface DesktopStatus {
+  message: string;
+}
+
+/** A bounded result of one native-owned authentication submission. */
+export interface DesktopAuthenticationView {
+  state: "authenticated" | "challenge_required" | "failed";
   message: string;
 }
 
@@ -129,6 +136,21 @@ export function parseDesktopStatus(value: unknown): DesktopStatus {
   }
 
   return { message: value.message };
+}
+
+/** Validates a display-only authentication result before React renders it. */
+export function parseDesktopAuthenticationView(value: unknown): DesktopAuthenticationView {
+  const result = z
+    .object({
+      state: z.enum(["authenticated", "challenge_required", "failed"]),
+      message: z.string().min(1).max(maxDesktopStatusMessageLength),
+    })
+    .strict()
+    .safeParse(value);
+  if (!result.success) {
+    throw new Error("The desktop core returned an invalid authentication result.");
+  }
+  return Object.freeze({ ...result.data });
 }
 
 /** Validates a bounded diagnostic export without accepting arbitrary native state. */

@@ -10,6 +10,7 @@ import { DesktopShell } from "../app/desktop-shell";
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
 import { ThemePreferenceControl } from "../features/theme/theme-preference-control";
+import { SignInForm } from "../features/auth/sign-in-form";
 
 /** A safe fallback for route-level failures that never serializes the original error. */
 export function RouteErrorFallback(): JSX.Element {
@@ -91,6 +92,15 @@ export function AppearanceRoute(): JSX.Element {
   );
 }
 
+/** The credential-entry route keeps browser history and persisted state free of secrets. */
+export function SignInRoute(): JSX.Element {
+  return (
+    <section className="mx-auto grid max-w-3xl place-items-start py-5 lg:py-9">
+      <SignInForm />
+    </section>
+  );
+}
+
 function Metadata({ label, value }: { label: string; value: string }): JSX.Element {
   return (
     <div className="bg-surface px-4 py-4">
@@ -117,7 +127,13 @@ const appearanceRoute = createRoute({
   component: AppearanceRoute,
 });
 
-const routeTree = rootRoute.addChildren([overviewRoute, appearanceRoute]);
+const signInRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/sign-in",
+  component: SignInRoute,
+});
+
+const routeTree = rootRoute.addChildren([overviewRoute, appearanceRoute, signInRoute]);
 
 /** The in-memory router avoids putting sensitive state into location history. */
 export const router = createRouter({

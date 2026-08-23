@@ -3,6 +3,12 @@
 use tauri::Manager;
 
 pub mod auth;
+#[cfg(not(coverage))]
+pub mod auth_service;
+#[cfg(coverage)]
+#[path = "auth_service_coverage.rs"]
+/// Deterministic native authentication surface used by coverage-only builds.
+pub mod auth_service;
 pub mod cognito;
 pub mod credential_store;
 pub mod session;
@@ -49,6 +55,29 @@ fn desktop_set_theme<R: tauri::Runtime>(
     theme.set(&app, preference, protocol_version)
 }
 
+/// Submits one bounded sign-in or administrator-invitation request to native Cognito handling.
+#[tauri::command]
+async fn desktop_authenticate(
+    request: auth::AuthenticationRequest,
+    protocol_version: Option<u16>,
+    authentication: tauri::State<'_, auth_service::DesktopAuthenticationService>,
+    session: tauri::State<'_, session::DesktopSessionService>,
+    lifecycle: tauri::State<'_, lifecycle::DesktopLifecycleService>,
+) -> Result<auth::AuthenticationView, ipc::IpcError> {
+    ipc::require_current_protocol_version(protocol_version)?;
+    let operation = lifecycle
+        .begin_native_operation(lifecycle::NativeOperationKind::Authentication)
+        .map_err(|_| ipc::IpcError::unavailable())?;
+    let cancellation = operation.cancellation();
+    let view = authentication
+        .authenticate(&request, &session, &cancellation)
+        .await;
+    lifecycle
+        .finish_native_operation(operation)
+        .map_err(|_| ipc::IpcError::unavailable())?;
+    Ok(view)
+}
+
 fn main() {
     let builder = tauri::Builder::default();
     #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -58,6 +87,7 @@ fn main() {
 
     let app = builder
         .manage(lifecycle::DesktopLifecycleService::new())
+        .manage(auth_service::DesktopAuthenticationService::new())
         .manage(session::DesktopSessionService::new())
         .manage(theme::DesktopThemeService::new())
         .setup(|app| {
@@ -97,9 +127,10 @@ fn main() {
                 .begin_native_operation(lifecycle::NativeOperationKind::Authentication)
                 .map_err(|_| tauri::Error::AssetNotFound("desktop session restoration".into()))?;
             let cancellation = restoration.cancellation();
-            let _ = app
-                .state::<session::DesktopSessionService>()
-                .restore_on_startup(&cancellation);
+            let session = app.state::<session::DesktopSessionService>();
+            let authentication = app.state::<auth_service::DesktopAuthenticationService>();
+            let _ = authentication.install_refresher(&session, &cancellation);
+            let _ = session.restore_on_startup(&cancellation);
             lifecycle
                 .finish_native_operation(restoration)
                 .map_err(|_| tauri::Error::AssetNotFound("desktop session restoration".into()))?;
@@ -110,7 +141,8 @@ fn main() {
             desktop_status,
             desktop_diagnostics,
             desktop_theme,
-            desktop_set_theme
+            desktop_set_theme,
+            desktop_authenticate
         ])
         .build(tauri::generate_context!())
         .expect("Cipher desktop failed to start");

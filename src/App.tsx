@@ -1,4 +1,5 @@
 import { RouterProvider } from "@tanstack/react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type JSX, useEffect, useState } from "react";
 
 import { router } from "./routes";
@@ -14,6 +15,15 @@ import { ThemeProvider } from "./features/theme/theme-provider";
  */
 export function App(): JSX.Element {
   const [rendererData] = useState<RendererDataLifetime>(() => createBrowserRendererDataLifetime());
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          mutations: { retry: false },
+          queries: { retry: false, staleTime: 0 },
+        },
+      }),
+  );
 
   useEffect(() => {
     let disposed = false;
@@ -43,7 +53,9 @@ export function App(): JSX.Element {
 
   return (
     <ThemeProvider>
-      <RouterProvider router={router} />
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
     </ThemeProvider>
   );
 }

@@ -39,6 +39,8 @@ const MIN_PASSWORD_BYTES: usize = 12;
 const MAX_PASSWORD_BYTES: usize = 256;
 const MAX_CHALLENGE_PARAMETER_BYTES: usize = 16 * 1024;
 const MAX_COGNITO_SESSION_BYTES: usize = 16 * 1024;
+/// Cognito access tokens are intentionally short lived and never persisted.
+pub const MAX_COGNITO_ACCESS_TOKEN_LIFETIME: Duration = Duration::from_secs(15 * 60);
 const PASSWORD_VERIFIER_PARAMETERS: &[&str] = &[
     "SALT",
     "SECRET_BLOCK",
@@ -240,7 +242,7 @@ impl CognitoTokenSet {
         if !valid_token(&access_token, 64 * 1024)
             || !valid_token(&refresh_material, 8 * 1024)
             || valid_for.is_zero()
-            || valid_for > Duration::from_secs(60 * 60)
+            || valid_for > MAX_COGNITO_ACCESS_TOKEN_LIFETIME
         {
             access_token.zeroize();
             refresh_material.zeroize();
@@ -266,6 +268,47 @@ impl CognitoTokenSet {
     /// Consumes the token set and yields platform-store-bound refresh material.
     pub fn into_refresh_material(self) -> SecretBytes {
         self.refresh_material
+    }
+}
+
+/// A refreshed Cognito access token kept in native memory until claim validation completes.
+pub struct CognitoRefresh {
+    access_token: Zeroizing<String>,
+    valid_for: Duration,
+}
+
+impl CognitoRefresh {
+    pub(crate) fn new(
+        mut access_token: String,
+        valid_for: Duration,
+    ) -> Result<Self, NativeAuthError> {
+        if !valid_token(&access_token, 64 * 1024)
+            || valid_for.is_zero()
+            || valid_for > MAX_COGNITO_ACCESS_TOKEN_LIFETIME
+        {
+            access_token.zeroize();
+            return Err(NativeAuthError::new(NativeAuthErrorCode::InvalidResponse));
+        }
+        Ok(Self {
+            access_token: Zeroizing::new(access_token),
+            valid_for,
+        })
+    }
+
+    /// Borrows raw token bytes only while the native validator checks them.
+    pub(crate) fn access_token(&self) -> &str {
+        &self.access_token
+    }
+
+    /// Returns the server-declared bounded lifetime.
+    pub(crate) const fn valid_for(&self) -> Duration {
+        self.valid_for
+    }
+}
+
+impl fmt::Debug for CognitoRefresh {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("CognitoRefresh([redacted])")
     }
 }
 
@@ -309,6 +352,12 @@ pub trait CognitoProvider: Send + Sync {
         parameters: HashMap<String, String>,
         session: &str,
     ) -> Result<CognitoAuthStep, NativeAuthError>;
+
+    /// Exchanges platform-held refresh material for one fresh native access token.
+    async fn refresh(
+        &self,
+        refresh_material: &SecretBytes,
+    ) -> Result<CognitoRefresh, NativeAuthError>;
 }
 
 trait AuthClock: Send + Sync {
@@ -554,6 +603,8 @@ pub enum AuthenticationViewState {
     Authenticated,
     /// A configured verification or MFA screen must collect one bounded response.
     ChallengeRequired,
+    /// The submission failed with fixed display text and no retained credential state.
+    Failed,
 }
 
 fn finish_sign_in(step: CognitoAuthStep) -> Result<NativeAuthOutcome, NativeAuthError> {
@@ -799,16 +850,33 @@ mod tests {
     use async_trait::async_trait;
     use cipher_native_transport::OperationCancellation;
 
+    use crate::credential_store::SecretBytes;
+
     use super::{
         AuthClock, AuthenticationRequest, CognitoAuthStep, CognitoChallengeKind,
-        CognitoChallengeStep, CognitoProvider, CognitoTokenSet, MAX_LOCAL_AUTH_ATTEMPTS,
-        NativeAuthError, NativeAuthErrorCode, NativeAuthOutcome, NativeCognitoAuthenticator,
-        SecretText, SystemAuthClock, validate_administrator_invitation_challenge,
+        CognitoChallengeStep, CognitoProvider, CognitoRefresh, CognitoTokenSet,
+        MAX_LOCAL_AUTH_ATTEMPTS, NativeAuthError, NativeAuthErrorCode, NativeAuthOutcome,
+        NativeCognitoAuthenticator, SecretText, SystemAuthClock,
+        validate_administrator_invitation_challenge,
     };
 
     const POOL_ID: &str = "us-east-1_TestPool123";
     const EMAIL: &str = "person@example.com";
     const PASSWORD: &str = "Strong-password1!";
+
+    #[test]
+    fn refreshed_access_tokens_are_bounded_and_redacted() {
+        let refresh = CognitoRefresh::new("access-token".into(), Duration::from_secs(15)).unwrap();
+        assert_eq!(refresh.access_token(), "access-token");
+        assert_eq!(refresh.valid_for(), Duration::from_secs(15));
+        assert!(!format!("{refresh:?}").contains("access-token"));
+        assert_eq!(
+            CognitoRefresh::new("".into(), Duration::from_secs(15))
+                .unwrap_err()
+                .code(),
+            NativeAuthErrorCode::InvalidResponse
+        );
+    }
 
     struct FixedClock {
         now: Mutex<Instant>,
@@ -904,6 +972,10 @@ mod tests {
         ) -> Result<CognitoAuthStep, NativeAuthError> {
             self.calls.lock().unwrap().push((kind, parameters));
             self.next().await
+        }
+
+        async fn refresh(&self, _: &SecretBytes) -> Result<CognitoRefresh, NativeAuthError> {
+            Err(NativeAuthError::new(NativeAuthErrorCode::Unavailable))
         }
     }
 

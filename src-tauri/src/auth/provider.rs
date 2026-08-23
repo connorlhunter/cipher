@@ -13,11 +13,11 @@ use aws_sdk_cognitoidentityprovider::{
     },
     types::{AuthFlowType, AuthenticationResultType, ChallengeNameType},
 };
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use super::{
-    CognitoAuthStep, CognitoChallengeKind, CognitoChallengeStep, CognitoProvider, CognitoTokenSet,
-    NativeAuthError, NativeAuthErrorCode,
+    CognitoAuthStep, CognitoChallengeKind, CognitoChallengeStep, CognitoProvider, CognitoRefresh,
+    CognitoTokenSet, NativeAuthError, NativeAuthErrorCode,
 };
 
 const MAX_CLIENT_ID_BYTES: usize = 128;
@@ -123,6 +123,25 @@ impl CognitoProvider for AwsCognitoProvider {
             step
         }
     }
+
+    async fn refresh(
+        &self,
+        refresh_material: &crate::credential_store::SecretBytes,
+    ) -> Result<CognitoRefresh, NativeAuthError> {
+        let refresh_material = String::from_utf8(refresh_material.as_bytes().to_vec())
+            .map(Zeroizing::new)
+            .map_err(|_| NativeAuthError::new(NativeAuthErrorCode::InvalidCredentials))?;
+        let output = self
+            .client
+            .initiate_auth()
+            .auth_flow(AuthFlowType::RefreshTokenAuth)
+            .client_id(&self.client_id)
+            .auth_parameters("REFRESH_TOKEN", refresh_material.as_str())
+            .send()
+            .await
+            .map_err(map_initiate_error)?;
+        parse_refresh_output(output)
+    }
 }
 
 fn parse_initiate_output(output: InitiateAuthOutput) -> Result<CognitoAuthStep, NativeAuthError> {
@@ -142,6 +161,32 @@ fn parse_respond_output(
         output.challenge_parameters,
         output.session,
         output.authentication_result,
+    )
+}
+
+fn parse_refresh_output(output: InitiateAuthOutput) -> Result<CognitoRefresh, NativeAuthError> {
+    if output.challenge_name.is_some()
+        || output.challenge_parameters.is_some()
+        || output.session.is_some()
+    {
+        return Err(invalid_response());
+    }
+    let mut result =
+        SensitiveAuthenticationResult(output.authentication_result.ok_or_else(invalid_response)?);
+    if result.0.token_type() != Some("Bearer")
+        || result.0.new_device_metadata.is_some()
+        || result.0.access_token.is_none()
+        || result.0.refresh_token.is_some()
+    {
+        return Err(invalid_response());
+    }
+    let valid_for = u64::try_from(result.0.expires_in())
+        .ok()
+        .map(Duration::from_secs)
+        .ok_or_else(invalid_response)?;
+    CognitoRefresh::new(
+        result.0.access_token.take().ok_or_else(invalid_response)?,
+        valid_for,
     )
 }
 
@@ -361,8 +406,8 @@ mod tests {
     };
 
     use super::{
-        AwsCognitoProvider, CognitoAuthStep, CognitoChallengeKind, NativeAuthErrorCode,
-        map_initiate_error, map_initiate_service_error, map_respond_error,
+        AwsCognitoProvider, CognitoAuthStep, CognitoChallengeKind, CognitoProvider,
+        NativeAuthErrorCode, map_initiate_error, map_initiate_service_error, map_respond_error,
         map_respond_service_error, parse_initiate_output, parse_respond_output, provider_challenge,
         provider_config, validate_public_configuration,
     };
@@ -527,5 +572,62 @@ mod tests {
         let rejected = map_respond_service_error(&rejected);
         assert_eq!(rejected.code(), NativeAuthErrorCode::PasswordRejected);
         assert!(!rejected.message().contains("upstream detail"));
+    }
+
+    #[test]
+    fn provider_rejects_invalid_native_challenges_and_refresh_material_before_network_use() {
+        let config = Config::builder()
+            .behavior_version(BehaviorVersion::latest())
+            .region(Region::new("us-east-1"))
+            .build();
+        let provider =
+            AwsCognitoProvider::from_client(Client::from_conf(config), "client123").unwrap();
+        assert_eq!(
+            tauri::async_runtime::block_on(provider.respond(
+                CognitoChallengeKind::Unsupported,
+                HashMap::new(),
+                "opaque-session",
+            ))
+            .unwrap_err()
+            .code(),
+            NativeAuthErrorCode::InvalidResponse
+        );
+        assert_eq!(
+            tauri::async_runtime::block_on(
+                provider.refresh(&crate::credential_store::SecretBytes::new(vec![0xff],))
+            )
+            .unwrap_err()
+            .code(),
+            NativeAuthErrorCode::InvalidCredentials
+        );
+    }
+
+    #[test]
+    fn provider_maps_a_local_unavailable_endpoint_without_exposing_request_values() {
+        let config = Config::builder()
+            .behavior_version(BehaviorVersion::latest())
+            .region(Region::new("us-east-1"))
+            .endpoint_url("http://127.0.0.1:9")
+            .build();
+        let provider =
+            AwsCognitoProvider::from_client(Client::from_conf(config), "client123").unwrap();
+        for result in [
+            tauri::async_runtime::block_on(provider.initiate_srp(HashMap::new())),
+            tauri::async_runtime::block_on(provider.respond(
+                CognitoChallengeKind::PasswordVerifier,
+                HashMap::new(),
+                "opaque-session",
+            )),
+        ] {
+            assert_eq!(result.unwrap_err().code(), NativeAuthErrorCode::Unavailable);
+        }
+        assert_eq!(
+            tauri::async_runtime::block_on(provider.refresh(
+                &crate::credential_store::SecretBytes::new(b"opaque-refresh-material".to_vec(),)
+            ))
+            .unwrap_err()
+            .code(),
+            NativeAuthErrorCode::Unavailable
+        );
     }
 }
