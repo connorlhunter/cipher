@@ -204,7 +204,7 @@ describe("desktop shell accessibility", () => {
     expect(screen.getByRole("main")).toBeDefined();
     expect(screen.getByRole("complementary", { name: "Workspace context" })).toBeDefined();
     expect(screen.getByRole("img", { name: "End-to-end encryption" }).getAttribute("title")).toBe(
-      "End-to-end encrypted: only you and the people you message can read your conversations.",
+      "End-to-end encryption is planned: only you and the people you message will be able to read your conversations. Cipher will generate an encryption key on your device, keep it there, and delete it when local app data is removed during uninstall.",
     );
 
     const user = userEvent.setup({ document: browser.document as unknown as Document });

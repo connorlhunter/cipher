@@ -65,7 +65,7 @@ export function OverviewRoute(): JSX.Element {
           <p
             aria-label="End-to-end encryption"
             className="type-caption mt-paragraph inline-flex items-center gap-2 text-muted"
-            title="End-to-end encrypted: only you and the people you message can read your conversations."
+            title="End-to-end encrypted: only you and the people you message can read your conversations. Your account uses an encryption key generated and securely stored on your device to encrypt your data. The key never leaves your device and is deleted when you uninstall the app. Your data is also deleted when you delete your account. Not even Cipher staff can access or read your encrypted conversations."
           >
             <LockKeyhole aria-hidden="true" size={15} strokeWidth={1.8} />
             Built for E2EE
