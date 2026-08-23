@@ -4,13 +4,17 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  Link,
 } from "@tanstack/react-router";
+import { LockKeyhole, LogIn, UserPlus } from "lucide-react";
 
 import { DesktopShell } from "../app/desktop-shell";
 import { Badge } from "../components/ui/badge";
+import { buttonVariants } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ThemePreferenceControl } from "../features/theme/theme-preference-control";
 import { SignInForm } from "../features/auth/sign-in-form";
+import { cn } from "../lib/utils";
 
 /** A safe fallback for route-level failures that never serializes the original error. */
 export function RouteErrorFallback(): JSX.Element {
@@ -52,7 +56,33 @@ export function OverviewRoute(): JSX.Element {
           Cipher
         </h1>
         <p className="type-body-muted mt-paragraph max-w-prose">
-          Private, secure messaging for the people you trust.
+          A private space for the conversations that matter most.
+        </p>
+        <p
+          aria-label="End-to-end encryption"
+          className="type-caption mt-paragraph inline-flex items-center gap-2 text-muted"
+          title="End-to-end encrypted: only you and the people you message can read your conversations."
+        >
+          <LockKeyhole aria-hidden="true" size={15} strokeWidth={1.8} />
+          Built for E2EE
+        </p>
+        <div className="mt-section flex flex-wrap justify-center gap-3">
+          <Link className={buttonVariants()} to="/sign-in">
+            <LogIn aria-hidden="true" size={17} strokeWidth={1.8} />
+            Log in
+          </Link>
+          <button
+            aria-describedby="sign-up-coming-soon"
+            className={cn(buttonVariants({ variant: "secondary" }))}
+            disabled
+            type="button"
+          >
+            <UserPlus aria-hidden="true" size={17} strokeWidth={1.8} />
+            Sign up
+          </button>
+        </div>
+        <p className="type-caption mt-2 text-muted" id="sign-up-coming-soon">
+          Sign up is coming soon.
         </p>
       </div>
     </section>
