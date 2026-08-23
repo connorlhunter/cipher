@@ -11,7 +11,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tower::ServiceExt;
 
-use super::{app, authenticated_app, run};
+use super::{app, authenticated_app, run_with_authorizer};
 use crate::auth::{AuthenticationError, CipherPrincipal, RequestAuthorizer, VerifiedIdentity};
 use crate::config::{AwsConfig, PublicEndpoints, ServerConfig};
 
@@ -105,12 +105,15 @@ async fn realtime_endpoint_accepts_a_websocket_upgrade() {
     let reservation = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let bind = reservation.local_addr().unwrap();
     drop(reservation);
-    let task = tokio::spawn(run(test_config(bind)));
+    let task = tokio::spawn(run_with_authorizer(
+        test_config(bind),
+        Arc::new(AllowOnlyKnownToken),
+    ));
     let mut stream = connect_when_ready(bind).await;
 
     stream
         .write_all(
-            b"GET /v1/realtime HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
+            b"GET /v1/realtime HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer signed.jwt.value\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
         )
         .await
         .unwrap();
@@ -127,12 +130,44 @@ async fn realtime_endpoint_accepts_a_websocket_upgrade() {
 }
 
 #[tokio::test]
+async fn realtime_endpoint_denies_an_upgrade_without_an_authorized_principal() {
+    let reservation = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let bind = reservation.local_addr().unwrap();
+    drop(reservation);
+    let task = tokio::spawn(run_with_authorizer(
+        test_config(bind),
+        Arc::new(AllowOnlyKnownToken),
+    ));
+    let mut stream = connect_when_ready(bind).await;
+
+    stream
+        .write_all(
+            b"GET /v1/realtime HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
+        )
+        .await
+        .unwrap();
+    let mut response = [0; 1024];
+    let length = stream.read(&mut response).await.unwrap();
+    assert!(
+        std::str::from_utf8(&response[..length])
+            .unwrap()
+            .starts_with("HTTP/1.1 401 Unauthorized")
+    );
+
+    task.abort();
+    assert!(task.await.unwrap_err().is_cancelled());
+}
+
+#[tokio::test]
 async fn run_binds_the_configured_address() {
     let reservation = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let bind = reservation.local_addr().unwrap();
     drop(reservation);
 
-    let task = tokio::spawn(run(test_config(bind)));
+    let task = tokio::spawn(run_with_authorizer(
+        test_config(bind),
+        Arc::new(AllowOnlyKnownToken),
+    ));
     let connection = connect_when_ready(bind).await;
 
     drop(connection);
@@ -166,7 +201,7 @@ impl RequestAuthorizer for AllowOnlyKnownToken {
             return Err(AuthenticationError::InvalidToken);
         }
         Ok(CipherPrincipal {
-            identity: VerifiedIdentity::new("sub_123", 1_800_000_000).unwrap(),
+            identity: VerifiedIdentity::new("sub_123", "origin_123", 1_800_000_000).unwrap(),
             user_id: "usr_123".into(),
             device_id: "dev_123".into(),
             session_id: "ses_123".into(),

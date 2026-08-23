@@ -10,6 +10,7 @@ use std::{
     time::Duration,
 };
 
+use aws_sdk_dynamodb::{Client as DynamoDbClient, types::AttributeValue};
 use axum::http::{HeaderMap, header::AUTHORIZATION};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
 use serde::Deserialize;
@@ -24,24 +25,32 @@ const JWKS_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VerifiedIdentity {
     subject: String,
+    session_family: String,
     expires_at: i64,
 }
 
 impl VerifiedIdentity {
     /// Creates a bounded identity after a JWT verifier has validated its claims.
-    pub fn new(subject: impl Into<String>, expires_at: i64) -> Result<Self, AuthenticationError> {
+    pub fn new(
+        subject: impl Into<String>,
+        session_family: impl Into<String>,
+        expires_at: i64,
+    ) -> Result<Self, AuthenticationError> {
         let subject = subject.into();
+        let session_family = session_family.into();
         if subject.is_empty()
             || subject.len() > 512
             || subject
                 .bytes()
                 .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
+            || !bounded_text(&session_family, 512)
             || expires_at < 0
         {
             return Err(AuthenticationError::InvalidToken);
         }
         Ok(Self {
             subject,
+            session_family,
             expires_at,
         })
     }
@@ -54,6 +63,11 @@ impl VerifiedIdentity {
     /// Returns the token expiry validated by the JWT verifier.
     pub const fn expires_at(&self) -> i64 {
         self.expires_at
+    }
+
+    /// Returns the Cognito token-family identifier used for Cipher session revocation.
+    pub fn session_family(&self) -> &str {
+        &self.session_family
     }
 }
 
@@ -111,7 +125,10 @@ pub struct PrincipalState {
 /// them into eventual reads would permit a revoked session to race a request.
 pub trait ConsistentPrincipalStore: Send + Sync {
     /// Resolves the current Cipher authorization state for a verified subject.
-    fn load(&self, subject: &str) -> Result<Option<PrincipalState>, AuthenticationError>;
+    fn load(
+        &self,
+        identity: &VerifiedIdentity,
+    ) -> Result<Option<PrincipalState>, AuthenticationError>;
 }
 
 /// Applies Cipher's revocation policy to one strongly consistent state record.
@@ -131,7 +148,7 @@ impl<S: ConsistentPrincipalStore> PrincipalGate for StoredPrincipalGate<S> {
         &self,
         identity: VerifiedIdentity,
     ) -> Result<CipherPrincipal, AuthenticationError> {
-        let Some(state) = self.store.load(identity.subject())? else {
+        let Some(state) = self.store.load(&identity)? else {
             return Err(AuthenticationError::Revoked);
         };
         if !state.user_enabled
@@ -150,6 +167,128 @@ impl<S: ConsistentPrincipalStore> PrincipalGate for StoredPrincipalGate<S> {
             session_id: state.session_id,
         })
     }
+}
+
+/// Reads the Cipher identity, session, and device records from DynamoDB.
+///
+/// Each read is strongly consistent. The immutable identity claim is resolved
+/// first; the session's device binding is then checked against active profile,
+/// session, and device records before a principal can be issued.
+#[derive(Clone)]
+pub struct DynamoPrincipalStore {
+    client: DynamoDbClient,
+    users_table: String,
+}
+
+impl DynamoPrincipalStore {
+    /// Creates a principal store for Cipher's users table.
+    pub fn new(
+        client: DynamoDbClient,
+        users_table: impl Into<String>,
+    ) -> Result<Self, AuthenticationError> {
+        let users_table = users_table.into();
+        if !bounded_text(&users_table, 255) {
+            return Err(AuthenticationError::SigningKeysUnavailable);
+        }
+        Ok(Self {
+            client,
+            users_table,
+        })
+    }
+}
+
+impl ConsistentPrincipalStore for DynamoPrincipalStore {
+    fn load(
+        &self,
+        identity: &VerifiedIdentity,
+    ) -> Result<Option<PrincipalState>, AuthenticationError> {
+        let identity_item = dynamo_get(
+            &self.client,
+            &self.users_table,
+            format!("IDENTITY#COGNITO#{}", identity.subject()),
+            "CLAIM".into(),
+        )?;
+        let Some(identity_item) = identity_item else {
+            return Ok(None);
+        };
+        let Some(user_id) = string_attribute(&identity_item, "user_id") else {
+            return Ok(None);
+        };
+        if !opaque_identifier(user_id, "usr_") {
+            return Ok(None);
+        }
+
+        let profile = dynamo_get(
+            &self.client,
+            &self.users_table,
+            format!("USER#{user_id}"),
+            "PROFILE".into(),
+        )?;
+        let session = dynamo_get(
+            &self.client,
+            &self.users_table,
+            format!("USER#{user_id}"),
+            format!("SESSION#{}", identity.session_family()),
+        )?;
+        let (Some(profile), Some(session)) = (profile, session) else {
+            return Ok(None);
+        };
+        let Some(device_id) = string_attribute(&session, "device_id") else {
+            return Ok(None);
+        };
+        if !opaque_identifier(device_id, "dev_") {
+            return Ok(None);
+        }
+        let device = dynamo_get(
+            &self.client,
+            &self.users_table,
+            format!("USER#{user_id}"),
+            format!("DEVICE#{device_id}"),
+        )?;
+        let Some(device) = device else {
+            return Ok(None);
+        };
+        Ok(Some(PrincipalState {
+            user_id: user_id.into(),
+            device_id: device_id.into(),
+            session_id: format!("ses_{}", identity.session_family()),
+            user_enabled: string_attribute(&profile, "status") == Some("active"),
+            device_active: string_attribute(&device, "status") == Some("active"),
+            session_active: string_attribute(&session, "status") == Some("active"),
+        }))
+    }
+}
+
+fn dynamo_get(
+    client: &DynamoDbClient,
+    table: &str,
+    partition_key: String,
+    sort_key: String,
+) -> Result<Option<std::collections::HashMap<String, AttributeValue>>, AuthenticationError> {
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current()
+            .block_on(
+                client
+                    .get_item()
+                    .table_name(table)
+                    .key("pk", AttributeValue::S(partition_key))
+                    .key("sk", AttributeValue::S(sort_key))
+                    .consistent_read(true)
+                    .send(),
+            )
+            .map_err(Box::new)
+    })
+    .map_err(|_| AuthenticationError::SigningKeysUnavailable)
+    .map(|response| response.item)
+}
+
+fn string_attribute<'a>(
+    item: &'a std::collections::HashMap<String, AttributeValue>,
+    name: &str,
+) -> Option<&'a str> {
+    item.get(name)
+        .and_then(|value| value.as_s().ok())
+        .map(String::as_str)
 }
 
 /// The safe category of a rejected authentication attempt.
@@ -390,7 +529,7 @@ impl<S: JwksSource> AccessTokenValidator for CognitoJwtValidator<S> {
         {
             return Err(AuthenticationError::InvalidToken);
         }
-        VerifiedIdentity::new(claims.sub, claims.exp)
+        VerifiedIdentity::new(claims.sub, claims.origin_jti, claims.exp)
     }
 }
 
@@ -426,6 +565,7 @@ struct CognitoClaims {
     exp: i64,
     scope: String,
     sub: String,
+    origin_jti: String,
 }
 #[derive(Deserialize)]
 struct JwksDocument {
@@ -543,13 +683,13 @@ mod tests {
 
     #[test]
     fn verified_identity_is_bounded_and_requires_a_valid_expiry() {
-        assert!(VerifiedIdentity::new("sub_123", 1).is_ok());
+        assert!(VerifiedIdentity::new("sub_123", "origin_123", 1).is_ok());
         assert_eq!(
-            VerifiedIdentity::new("", 1),
+            VerifiedIdentity::new("", "origin_123", 1),
             Err(AuthenticationError::InvalidToken)
         );
         assert_eq!(
-            VerifiedIdentity::new("sub", -1),
+            VerifiedIdentity::new("sub", "origin_123", -1),
             Err(AuthenticationError::InvalidToken)
         );
     }
@@ -585,7 +725,7 @@ mod tests {
         ] {
             let gate = StoredPrincipalGate::new(TestStore(state));
             assert_eq!(
-                gate.authorize(VerifiedIdentity::new("sub_1", 1).unwrap()),
+                gate.authorize(VerifiedIdentity::new("sub_1", "origin_1", 1).unwrap()),
                 Err(AuthenticationError::Revoked)
             );
         }
@@ -602,14 +742,17 @@ mod tests {
             session_active: true,
         })));
         let principal = gate
-            .authorize(VerifiedIdentity::new("sub_1", 1).unwrap())
+            .authorize(VerifiedIdentity::new("sub_1", "origin_1", 1).unwrap())
             .unwrap();
         assert_eq!(principal.user_id, "usr_1");
     }
 
     struct TestStore(Option<PrincipalState>);
     impl ConsistentPrincipalStore for TestStore {
-        fn load(&self, _subject: &str) -> Result<Option<PrincipalState>, AuthenticationError> {
+        fn load(
+            &self,
+            _identity: &VerifiedIdentity,
+        ) -> Result<Option<PrincipalState>, AuthenticationError> {
             Ok(self.0.clone())
         }
     }

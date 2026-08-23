@@ -16,9 +16,15 @@ use axum::{
 use cipher_types::ServiceStatus;
 
 use crate::{
-    auth::{AuthenticationError, RequestAuthorizer},
+    auth::{
+        AuthenticationError, CognitoJwtValidator, CognitoTokenPolicy, DynamoPrincipalStore,
+        HttpJwksSource, RequestAuthorizer, ServerAuthorizer, StoredPrincipalGate,
+    },
     config::ServerConfig,
 };
+
+const COGNITO_REQUIRED_SCOPE: &str = "aws.cognito.signin.user.admin";
+const JWKS_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
 pub mod auth;
 pub mod config;
@@ -52,6 +58,15 @@ pub fn authenticated_app(authorizer: Arc<dyn RequestAuthorizer>) -> Router {
 ///
 /// Returns I/O errors raised while binding or serving.
 pub async fn run(config: ServerConfig) -> io::Result<()> {
+    let authorizer = production_authorizer(&config).await?;
+    run_with_authorizer(config, authorizer).await
+}
+
+/// Binds the configured address with the supplied shared request authorizer.
+pub async fn run_with_authorizer(
+    config: ServerConfig,
+    authorizer: Arc<dyn RequestAuthorizer>,
+) -> io::Result<()> {
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
     tracing::info!(
         bind = %config.bind,
@@ -59,7 +74,33 @@ pub async fn run(config: ServerConfig) -> io::Result<()> {
         api_origin = %config.endpoints.api_origin,
         "Cipher backend listening"
     );
-    axum::serve(listener, app()).await
+    axum::serve(listener, authenticated_app(authorizer)).await
+}
+
+async fn production_authorizer(config: &ServerConfig) -> io::Result<Arc<dyn RequestAuthorizer>> {
+    let issuer = format!(
+        "https://cognito-idp.{}.amazonaws.com/{}",
+        config.aws.region, config.aws.cognito_user_pool_id
+    );
+    let policy = CognitoTokenPolicy::new(
+        issuer.clone(),
+        config.aws.cognito_client_id.clone(),
+        [COGNITO_REQUIRED_SCOPE],
+        JWKS_MAX_AGE,
+    )
+    .map_err(|_| io::Error::other("invalid production authentication policy"))?;
+    let source = HttpJwksSource::new(&issuer)
+        .map_err(|_| io::Error::other("invalid Cognito JWKS endpoint"))?;
+    let sdk_config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+    let store = DynamoPrincipalStore::new(
+        aws_sdk_dynamodb::Client::new(&sdk_config),
+        config.aws.users_table.clone(),
+    )
+    .map_err(|_| io::Error::other("invalid users-table configuration"))?;
+    Ok(Arc::new(ServerAuthorizer::new(
+        CognitoJwtValidator::new(policy, source),
+        StoredPrincipalGate::new(store),
+    )))
 }
 
 async fn health() -> Json<ServiceStatus> {
