@@ -136,7 +136,9 @@ export function SignInForm(): JSX.Element {
         <p
           aria-live="polite"
           className={
-            result.state === "authenticated" ? "mt-paragraph type-caption text-success" : "mt-paragraph type-caption text-muted"
+            result.state === "authenticated"
+              ? "mt-paragraph type-caption text-success"
+              : "mt-paragraph type-caption text-muted"
           }
         >
           {result.message}
@@ -160,9 +162,7 @@ function VerificationForm({
     validators: { onSubmit: verificationValues },
     onSubmit: async ({ value }) => {
       try {
-        onResult(
-          await submit({ flow: "continue_challenge", code: value.code.trim() }),
-        );
+        onResult(await submit({ flow: "continue_challenge", code: value.code.trim() }));
       } catch {
         onResult({ state: "failed", message: "Authentication is temporarily unavailable." });
       } finally {
