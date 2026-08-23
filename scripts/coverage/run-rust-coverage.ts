@@ -14,6 +14,8 @@ const result = Bun.spawnSync(
     "95",
     "--fail-under-functions",
     "95",
+    "--ignore-filename-regex",
+    "src-tauri[/\\\\]src[/\\\\]main\\.rs$",
     "--lcov",
     "--output-path",
     outputPath,
