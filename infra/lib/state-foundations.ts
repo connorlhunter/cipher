@@ -101,13 +101,13 @@ export function addStateFoundations(
   });
 
   const userPoolClient = userPool.addClient("NativePublicClient", {
-    accessTokenValidity: cdk.Duration.hours(1),
+    accessTokenValidity: cdk.Duration.minutes(15),
     authFlows: { userSrp: true },
     authSessionValidity: cdk.Duration.minutes(3),
     disableOAuth: true,
     enableTokenRevocation: true,
     generateSecret: false,
-    idTokenValidity: cdk.Duration.hours(1),
+    idTokenValidity: cdk.Duration.minutes(15),
     preventUserExistenceErrors: true,
     refreshTokenValidity: cdk.Duration.days(30),
     supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO],

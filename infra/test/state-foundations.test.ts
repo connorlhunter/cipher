@@ -119,8 +119,8 @@ describe("Cipher state foundations", () => {
     assert.equal(client.EnableTokenRevocation, true);
     assert.equal(client.PreventUserExistenceErrors, "ENABLED");
     assert.deepEqual(client.SupportedIdentityProviders, ["COGNITO"]);
-    assert.equal(client.AccessTokenValidity, 60);
-    assert.equal(client.IdTokenValidity, 60);
+    assert.equal(client.AccessTokenValidity, 15);
+    assert.equal(client.IdTokenValidity, 15);
     assert.equal(client.RefreshTokenValidity, 43200);
     assert.deepEqual(client.TokenValidityUnits, {
       AccessToken: "minutes",
