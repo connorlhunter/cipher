@@ -12,6 +12,7 @@ import { DesktopShell } from "../app/desktop-shell";
 import { Badge } from "../components/ui/badge";
 import { buttonVariants } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { DeviceSettings } from "../features/settings/device-settings";
 import { ThemePreferenceControl } from "../features/theme/theme-preference-control";
 import { PasswordResetForm, SignInForm } from "../features/auth/sign-in-form";
 import { cn } from "../lib/utils";
@@ -64,7 +65,7 @@ export function OverviewRoute(): JSX.Element {
           <p
             aria-label="End-to-end encryption"
             className="type-caption mt-paragraph inline-flex items-center gap-2 text-muted"
-            title="End-to-end encrypted: only you and the people you message can read your conversations."
+            title="End-to-end encrypted: only you and the people you message can read your conversations. Your account uses an encryption key generated and securely stored on your device to encrypt your data. The key never leaves your device and is deleted when you uninstall the app. Your data is also deleted when you delete your account. Not even Cipher staff can access or read your encrypted conversations."
           >
             <LockKeyhole aria-hidden="true" size={15} strokeWidth={1.8} />
             Built for E2EE
@@ -111,6 +112,7 @@ export function AppearanceRoute(): JSX.Element {
           <ThemePreferenceControl />
         </div>
       </Card>
+      <DeviceSettings />
     </section>
   );
 }

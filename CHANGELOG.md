@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.0-prealpha.8] - 2026-08-22
+
+### Added
+
+- Production network, gateway, deployment-control, ingress-verification, and private-media integrity foundations.
+
+### Fixed
+
+- Require and verify signed media payloads, immutable GitHub deployment subjects, scoped deployment image tags, and image builds across every workspace target.
+- Authorize production smoke checks and verify signed fixture uploads with checksum sentinels.
+
+### Changed
+
+- Move published project documentation and diagrams to the artifact generator.
+
 ## [0.1.0-prealpha.7] - 2026-08-21
 
 ### Added
@@ -14,6 +29,12 @@
 ### Known limits
 
 - Control, Network, and Runtime stacks, authenticated application flows, durable messaging, and live operational drills remain incomplete.
+
+## [0.1.0-prealpha.6] - 2026-08-21
+
+### Added
+
+- Versioned protocol contracts, a bounded desktop IPC boundary, and pull-request issue-link enforcement.
 
 ## [0.1.0-prealpha.5] - 2026-08-21
 

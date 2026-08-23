@@ -204,7 +204,7 @@ describe("desktop shell accessibility", () => {
     expect(screen.getByRole("main")).toBeDefined();
     expect(screen.getByRole("complementary", { name: "Workspace context" })).toBeDefined();
     expect(screen.getByRole("img", { name: "End-to-end encryption" }).getAttribute("title")).toBe(
-      "End-to-end encrypted: only you and the people you message can read your conversations.",
+      "End-to-end encrypted: only you and the people you message can read your conversations. Your account uses an encryption key generated and securely stored on your device to encrypt your data. The key never leaves your device and is deleted when you uninstall the app. Your data is also deleted when you delete your account. Not even Cipher staff can access or read your encrypted conversations.",
     );
 
     const user = userEvent.setup({ document: browser.document as unknown as Document });
@@ -384,5 +384,10 @@ describe("desktop shell accessibility", () => {
       </ThemeProvider>,
     );
     expect(screen.getByText("Choose the look that feels right for you.")).toBeDefined();
+    expect(screen.getByText("Voice")).toBeDefined();
+    expect(screen.getByText("Video")).toBeDefined();
+    expect(screen.getByText("Notifications")).toBeDefined();
+    expect(screen.getAllByText("Changelog").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Uninstall Cipher" })).toBeDefined();
   });
 });
