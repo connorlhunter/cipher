@@ -1479,6 +1479,17 @@ mod tests {
         assert!(!format!("{outcome:?}").contains("opaque-session"));
     }
 
+    #[tokio::test]
+    async fn scripted_provider_refresh_is_fail_closed() {
+        let provider = ScriptedProvider::new(Vec::new());
+        let error = provider
+            .refresh(&SecretBytes::new(b"refresh-material".to_vec()))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), NativeAuthErrorCode::Unavailable);
+    }
+
     #[test]
     fn request_validation_and_debug_never_echo_credentials() {
         for request in [
