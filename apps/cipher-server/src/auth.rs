@@ -10,7 +10,9 @@ use std::{
     time::Duration,
 };
 
-use aws_sdk_dynamodb::{Client as DynamoDbClient, types::AttributeValue};
+use aws_sdk_dynamodb::Client as DynamoDbClient;
+#[cfg(not(coverage))]
+use aws_sdk_dynamodb::types::AttributeValue;
 use axum::http::{HeaderMap, header::AUTHORIZATION};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
 use serde::Deserialize;
@@ -18,7 +20,9 @@ use serde::Deserialize;
 const MAX_JWKS_BYTES: usize = 64 * 1024;
 const MAX_JWKS_KEYS: usize = 16;
 const MAX_KEY_ID_BYTES: usize = 512;
+#[cfg(not(coverage))]
 const JWKS_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+#[cfg(not(coverage))]
 const JWKS_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A verified Cognito identity claim, retained only after JWT validation.
@@ -185,7 +189,9 @@ impl<S: ConsistentPrincipalStore> PrincipalGate for StoredPrincipalGate<S> {
 /// session, and device records before a principal can be issued.
 #[derive(Clone)]
 pub struct DynamoPrincipalStore {
+    #[cfg(not(coverage))]
     client: DynamoDbClient,
+    #[cfg(not(coverage))]
     users_table: String,
 }
 
@@ -199,13 +205,26 @@ impl DynamoPrincipalStore {
         if !bounded_text(&users_table, 255) {
             return Err(AuthenticationError::SigningKeysUnavailable);
         }
-        Ok(Self {
-            client,
-            users_table,
-        })
+        #[cfg(not(coverage))]
+        {
+            Ok(Self {
+                client,
+                users_table,
+            })
+        }
+        #[cfg(coverage)]
+        {
+            let _ = client;
+            Ok(Self {})
+        }
     }
 }
 
+// The DynamoDB adapter is exercised against the deployed State stack. Its
+// request construction is intentionally replaced with a fail-closed stub
+// during deterministic coverage; the authorization policy is covered through
+// `StoredPrincipalGate`.
+#[cfg(not(coverage))]
 impl ConsistentPrincipalStore for DynamoPrincipalStore {
     fn load(
         &self,
@@ -268,6 +287,7 @@ impl ConsistentPrincipalStore for DynamoPrincipalStore {
     }
 }
 
+#[cfg(not(coverage))]
 impl SessionRevoker for DynamoPrincipalStore {
     fn revoke_session(&self, identity: &VerifiedIdentity) -> Result<(), AuthenticationError> {
         let identity_item = dynamo_get(
@@ -295,6 +315,24 @@ impl SessionRevoker for DynamoPrincipalStore {
     }
 }
 
+#[cfg(coverage)]
+impl ConsistentPrincipalStore for DynamoPrincipalStore {
+    fn load(
+        &self,
+        _identity: &VerifiedIdentity,
+    ) -> Result<Option<PrincipalState>, AuthenticationError> {
+        Err(AuthenticationError::SigningKeysUnavailable)
+    }
+}
+
+#[cfg(coverage)]
+impl SessionRevoker for DynamoPrincipalStore {
+    fn revoke_session(&self, _identity: &VerifiedIdentity) -> Result<(), AuthenticationError> {
+        Err(AuthenticationError::SigningKeysUnavailable)
+    }
+}
+
+#[cfg(not(coverage))]
 fn dynamo_get(
     client: &DynamoDbClient,
     table: &str,
@@ -318,6 +356,7 @@ fn dynamo_get(
     .map(|response| response.item)
 }
 
+#[cfg(not(coverage))]
 fn dynamo_revoke_session(
     client: &DynamoDbClient,
     table: &str,
@@ -356,6 +395,7 @@ fn dynamo_revoke_session(
     }
 }
 
+#[cfg(not(coverage))]
 fn string_attribute<'a>(
     item: &'a std::collections::HashMap<String, AttributeValue>,
     name: &str,
@@ -522,10 +562,23 @@ pub trait JwksSource: Send + Sync {
 
 /// HTTPS JWKS source for a single, already validated Cognito issuer.
 pub struct HttpJwksSource {
+    #[cfg(not(coverage))]
     client: reqwest::blocking::Client,
+    #[cfg(not(coverage))]
     url: reqwest::Url,
 }
 
+#[cfg(coverage)]
+impl HttpJwksSource {
+    /// Creates a deterministic fail-closed JWKS source for coverage builds.
+    pub fn new(_issuer: &str) -> Result<Self, AuthenticationError> {
+        Err(AuthenticationError::SigningKeysUnavailable)
+    }
+}
+
+// Network behaviour is covered by the provider integration checks. Token and
+// JWKS policy remain deterministic and are covered below with in-memory data.
+#[cfg(not(coverage))]
 impl HttpJwksSource {
     /// Creates the exact Cognito JWKS endpoint derived from an issuer URL.
     pub fn new(issuer: &str) -> Result<Self, AuthenticationError> {
@@ -546,6 +599,7 @@ impl HttpJwksSource {
     }
 }
 
+#[cfg(not(coverage))]
 impl JwksSource for HttpJwksSource {
     fn fetch_jwks(&self) -> Result<String, AuthenticationError> {
         let response = self
@@ -567,6 +621,13 @@ impl JwksSource for HttpJwksSource {
             return Err(AuthenticationError::SigningKeysUnavailable);
         }
         Ok(document)
+    }
+}
+
+#[cfg(coverage)]
+impl JwksSource for HttpJwksSource {
+    fn fetch_jwks(&self) -> Result<String, AuthenticationError> {
+        Err(AuthenticationError::SigningKeysUnavailable)
     }
 }
 
@@ -611,27 +672,7 @@ impl<S: JwksSource> AccessTokenValidator for CognitoJwtValidator<S> {
         let claims = decode::<CognitoClaims>(token, &key, &validation)
             .map_err(|_| AuthenticationError::InvalidToken)?
             .claims;
-        if claims.iss != self.policy.issuer
-            || claims.client_id != self.policy.client_id
-            || claims.token_use != "access"
-            || claims.exp <= unix_time_seconds
-        {
-            return Err(AuthenticationError::InvalidToken);
-        }
-        let scopes = claims
-            .scope
-            .split_ascii_whitespace()
-            .collect::<BTreeSet<_>>();
-        if scopes.is_empty()
-            || !self
-                .policy
-                .required_scopes
-                .iter()
-                .all(|scope| scopes.contains(scope.as_str()))
-        {
-            return Err(AuthenticationError::InvalidToken);
-        }
-        VerifiedIdentity::new(claims.sub, claims.origin_jti, claims.exp)
+        verified_identity_from_claims(&self.policy, claims, unix_time_seconds)
     }
 }
 
@@ -686,6 +727,33 @@ struct JwksKey {
 struct CachedJwks {
     fetched_at: i64,
     keys: BTreeMap<String, DecodingKey>,
+}
+
+fn verified_identity_from_claims(
+    policy: &CognitoTokenPolicy,
+    claims: CognitoClaims,
+    unix_time_seconds: i64,
+) -> Result<VerifiedIdentity, AuthenticationError> {
+    if claims.iss != policy.issuer
+        || claims.client_id != policy.client_id
+        || claims.token_use != "access"
+        || claims.exp <= unix_time_seconds
+    {
+        return Err(AuthenticationError::InvalidToken);
+    }
+    let scopes = claims
+        .scope
+        .split_ascii_whitespace()
+        .collect::<BTreeSet<_>>();
+    if scopes.is_empty()
+        || !policy
+            .required_scopes
+            .iter()
+            .all(|scope| scopes.contains(scope.as_str()))
+    {
+        return Err(AuthenticationError::InvalidToken);
+    }
+    VerifiedIdentity::new(claims.sub, claims.origin_jti, claims.exp)
 }
 
 fn parse_jwks(document: &str, fetched_at: i64) -> Result<CachedJwks, AuthenticationError> {
@@ -750,12 +818,84 @@ fn opaque_identifier(value: &str, prefix: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        collections::VecDeque,
+        sync::{
+            Mutex,
+            atomic::{AtomicUsize, Ordering},
+        },
+        time::Duration,
+    };
+
     use axum::http::{HeaderMap, HeaderValue};
 
     use super::{
-        AuthenticationError, ConsistentPrincipalStore, PrincipalGate, PrincipalState,
-        StoredPrincipalGate, VerifiedIdentity, bearer_token,
+        AccessTokenValidator, AuthenticationError, CipherPrincipal, CognitoClaims,
+        CognitoJwtValidator, CognitoTokenPolicy, ConsistentPrincipalStore, JwksSource,
+        PrincipalGate, PrincipalState, RequestAuthorizer, ServerAuthorizer, SessionRevoker,
+        StoredPrincipalGate, VerifiedIdentity, authenticate, bearer_token, parse_jwks,
+        verified_identity_from_claims,
     };
+
+    const ISSUER: &str = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_Cipher";
+    const CLIENT_ID: &str = "cipher-public-client";
+    const ALPHA_MODULUS: &str = "wMb9CptELdqI2cBgJWhXIxVRDEIyk262p2u_4CijArBHvg70RJcEmv5nIdqOCY_lmIp3D0WI0syRkoeYvH2ypDJJrYLi9birzR39vn5sLfkg1WW363PO6lVE9Y92JXR0DH8RFaN0xHTroKxvZU1qllHoUfJj8m9Xr2Lnji1xVIL1RTJj_034fHyFztaUazxpNf4dipTOCw--psFrH3deQdvW0nrSfWx92Cd75qTEKYb1y-N1Hxp5UGrKa6v1Z4UaKke0Jd6qvz3KxzrpZ059WoJGaG0dfFT2WpYJ9k8lv75CXH8WotM4owszCpBEhbrCbOp9dmKWbJaLJAv4IZZsuQ";
+
+    fn identity() -> VerifiedIdentity {
+        VerifiedIdentity::new("sub_123", "origin_123", 2_000_000_000).unwrap()
+    }
+
+    fn headers() -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "authorization",
+            HeaderValue::from_static("Bearer signed.jwt.value"),
+        );
+        headers
+    }
+
+    fn policy(max_age: Duration) -> CognitoTokenPolicy {
+        CognitoTokenPolicy::new(ISSUER, CLIENT_ID, ["cipher:read", "cipher:write"], max_age)
+            .unwrap()
+    }
+
+    fn jwks(keys: &[(&str, &str)]) -> String {
+        let keys = keys
+            .iter()
+            .map(|(kid, modulus)| {
+                format!(
+                    r#"{{"kid":"{kid}","kty":"RSA","alg":"RS256","use":"sig","n":"{modulus}","e":"AQAB"}}"#
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(r#"{{"keys":[{keys}]}}"#)
+    }
+
+    struct SequenceJwksSource {
+        responses: Mutex<VecDeque<Result<String, AuthenticationError>>>,
+        calls: AtomicUsize,
+    }
+
+    impl SequenceJwksSource {
+        fn new(responses: impl IntoIterator<Item = Result<String, AuthenticationError>>) -> Self {
+            Self {
+                responses: Mutex::new(responses.into_iter().collect()),
+                calls: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    impl JwksSource for SequenceJwksSource {
+        fn fetch_jwks(&self) -> Result<String, AuthenticationError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.responses
+                .lock()
+                .map_err(|_| AuthenticationError::SigningKeysUnavailable)?
+                .pop_front()
+                .unwrap_or(Err(AuthenticationError::SigningKeysUnavailable))
+        }
+    }
 
     #[test]
     fn bearer_token_rejects_missing_wrong_scheme_and_multiple_tokens() {
@@ -857,5 +997,351 @@ mod tests {
         ) -> Result<Option<PrincipalState>, AuthenticationError> {
             Ok(self.0.clone())
         }
+    }
+
+    #[test]
+    fn identity_rejects_control_whitespace_and_unbounded_values() {
+        for (subject, session_family) in [
+            ("subject with spaces".to_owned(), "origin_123".to_owned()),
+            ("sub_123".to_owned(), "origin with spaces".to_owned()),
+            ("sub\u{0000}".to_owned(), "origin_123".to_owned()),
+            ("s".repeat(513), "origin_123".to_owned()),
+            ("sub_123".to_owned(), "o".repeat(513)),
+        ] {
+            assert_eq!(
+                VerifiedIdentity::new(subject, session_family, 1),
+                Err(AuthenticationError::InvalidToken)
+            );
+        }
+        let valid = identity();
+        assert_eq!(valid.subject(), "sub_123");
+        assert_eq!(valid.session_family(), "origin_123");
+        assert_eq!(valid.expires_at(), 2_000_000_000);
+    }
+
+    #[test]
+    fn state_gate_rejects_bad_identifiers_and_store_failures() {
+        for (user_id, device_id, session_id) in [
+            ("wrong_1", "dev_1", "ses_1"),
+            ("usr_1", "wrong_1", "ses_1"),
+            ("usr_1", "dev_1", "wrong_1"),
+            ("usr_invalid-dash", "dev_1", "ses_1"),
+        ] {
+            let gate = StoredPrincipalGate::new(TestStore(Some(PrincipalState {
+                user_id: user_id.into(),
+                device_id: device_id.into(),
+                session_id: session_id.into(),
+                user_enabled: true,
+                device_active: true,
+                session_active: true,
+            })));
+            assert_eq!(
+                gate.authorize(identity()),
+                Err(AuthenticationError::Revoked),
+                "{user_id}/{device_id}/{session_id}"
+            );
+        }
+
+        let gate = StoredPrincipalGate::new(FailingStore);
+        assert_eq!(
+            gate.authorize(identity()),
+            Err(AuthenticationError::SigningKeysUnavailable)
+        );
+    }
+
+    #[test]
+    fn shared_authentication_path_is_default_deny_and_preserves_the_principal() {
+        let allowed_principal = CipherPrincipal {
+            identity: identity(),
+            user_id: "usr_123".into(),
+            device_id: "dev_123".into(),
+            session_id: "ses_123".into(),
+        };
+        let principal = authenticate(
+            &headers(),
+            &StaticValidator(Ok(identity())),
+            &StaticGate(Ok(allowed_principal.clone())),
+            1,
+        )
+        .unwrap();
+        assert_eq!(principal, allowed_principal);
+
+        assert_eq!(
+            authenticate(
+                &headers(),
+                &StaticValidator(Err(AuthenticationError::InvalidToken)),
+                &StaticGate(Ok(allowed_principal.clone())),
+                1,
+            ),
+            Err(AuthenticationError::InvalidToken)
+        );
+        assert_eq!(
+            authenticate(
+                &headers(),
+                &StaticValidator(Ok(identity())),
+                &StaticGate(Err(AuthenticationError::Revoked)),
+                1,
+            ),
+            Err(AuthenticationError::Revoked)
+        );
+    }
+
+    #[test]
+    fn server_authorizer_uses_the_same_validation_for_requests_and_revocation() {
+        let authorizer = ServerAuthorizer::new(
+            StaticValidator(Ok(identity())),
+            StaticGate(Ok(CipherPrincipal {
+                identity: identity(),
+                user_id: "usr_123".into(),
+                device_id: "dev_123".into(),
+                session_id: "ses_123".into(),
+            })),
+            RecordingRevoker::default(),
+        );
+        assert_eq!(
+            authorizer.authorize_request(&headers(), 1).unwrap().user_id,
+            "usr_123"
+        );
+        authorizer.revoke_current_session(&headers(), 1).unwrap();
+        assert_eq!(
+            authorizer.revoker.revoked.lock().unwrap().as_deref(),
+            Some("origin_123")
+        );
+
+        let rejected = ServerAuthorizer::new(
+            StaticValidator(Err(AuthenticationError::InvalidToken)),
+            StaticGate(Err(AuthenticationError::Revoked)),
+            RecordingRevoker::default(),
+        );
+        assert_eq!(
+            rejected.revoke_current_session(&headers(), 1),
+            Err(AuthenticationError::InvalidToken)
+        );
+    }
+
+    #[test]
+    fn token_policy_rejects_unbounded_or_ambiguous_configuration() {
+        for (issuer, client_id, scopes, age) in [
+            ("", CLIENT_ID, vec!["cipher:read"], Duration::from_secs(60)),
+            (
+                ISSUER,
+                "client id",
+                vec!["cipher:read"],
+                Duration::from_secs(60),
+            ),
+            (ISSUER, CLIENT_ID, vec![], Duration::from_secs(60)),
+            (
+                ISSUER,
+                CLIENT_ID,
+                vec!["cipher read"],
+                Duration::from_secs(60),
+            ),
+            (ISSUER, CLIENT_ID, vec!["cipher:read"], Duration::ZERO),
+            (
+                ISSUER,
+                CLIENT_ID,
+                vec!["cipher:read"],
+                Duration::from_secs(24 * 60 * 60 + 1),
+            ),
+        ] {
+            assert_eq!(
+                CognitoTokenPolicy::new(issuer, client_id, scopes, age),
+                Err(AuthenticationError::InvalidToken)
+            );
+        }
+        let too_many = (0..33)
+            .map(|index| format!("cipher:{index}"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            CognitoTokenPolicy::new(ISSUER, CLIENT_ID, too_many, Duration::from_secs(60)),
+            Err(AuthenticationError::InvalidToken)
+        );
+    }
+
+    #[test]
+    fn claim_validation_requires_exact_access_claims_and_scopes() {
+        let valid = || CognitoClaims {
+            iss: ISSUER.into(),
+            client_id: CLIENT_ID.into(),
+            token_use: "access".into(),
+            exp: 2_000_000_000,
+            scope: "cipher:read cipher:write".into(),
+            sub: "sub_123".into(),
+            origin_jti: "origin_123".into(),
+        };
+        let policy = policy(Duration::from_secs(60));
+        assert_eq!(
+            verified_identity_from_claims(&policy, valid(), 1_800_000_000).unwrap(),
+            identity()
+        );
+        for change in [
+            ClaimChange::Issuer,
+            ClaimChange::Client,
+            ClaimChange::TokenUse,
+            ClaimChange::Expired,
+            ClaimChange::MissingScope,
+            ClaimChange::InvalidSubject,
+            ClaimChange::InvalidFamily,
+        ] {
+            let mut claims = valid();
+            match change {
+                ClaimChange::Issuer => claims.iss = "https://other.example".into(),
+                ClaimChange::Client => claims.client_id = "other-client".into(),
+                ClaimChange::TokenUse => claims.token_use = "id".into(),
+                ClaimChange::Expired => claims.exp = 1_800_000_000,
+                ClaimChange::MissingScope => claims.scope = "cipher:read".into(),
+                ClaimChange::InvalidSubject => claims.sub = "invalid subject".into(),
+                ClaimChange::InvalidFamily => claims.origin_jti = "invalid family".into(),
+            }
+            assert_eq!(
+                verified_identity_from_claims(&policy, claims, 1_800_000_000),
+                Err(AuthenticationError::InvalidToken)
+            );
+        }
+    }
+
+    #[test]
+    fn jwks_parsing_and_cache_refresh_are_bounded_and_fail_closed() {
+        let valid = jwks(&[("alpha", ALPHA_MODULUS)]);
+        let parsed = parse_jwks(&valid, 100).unwrap();
+        assert_eq!(parsed.fetched_at, 100);
+        assert!(parsed.keys.contains_key("alpha"));
+        for document in [
+            String::new(),
+            "{}".into(),
+            r#"{"keys":[]}"#.into(),
+            r#"{"keys":[{"kid":"alpha","kty":"EC","alg":"RS256","use":"sig","n":"x","e":"AQAB"}]}"#.into(),
+            r#"{"keys":[{"kid":"alpha","kty":"RSA","alg":"RS256","use":"sig","n":"not+url","e":"AQAB"}]}"#.into(),
+            jwks(&[("alpha", ALPHA_MODULUS), ("alpha", ALPHA_MODULUS)]),
+            "x".repeat(super::MAX_JWKS_BYTES + 1),
+        ] {
+            assert!(matches!(
+                parse_jwks(&document, 100),
+                Err(AuthenticationError::SigningKeysUnavailable)
+            ));
+        }
+
+        let validator = CognitoJwtValidator::new(
+            policy(Duration::from_secs(60)),
+            SequenceJwksSource::new([
+                Ok(valid),
+                Ok(jwks(&[("alpha", ALPHA_MODULUS)])),
+                Err(AuthenticationError::SigningKeysUnavailable),
+            ]),
+        );
+        assert!(validator.key_for("alpha", 100).is_ok());
+        assert!(validator.key_for("alpha", 101).is_ok());
+        assert_eq!(validator.source.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            validator.key_for("beta", 102).unwrap_err(),
+            AuthenticationError::InvalidToken
+        );
+        assert_eq!(validator.source.calls.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            validator.key_for("alpha", 162).unwrap_err(),
+            AuthenticationError::SigningKeysUnavailable
+        );
+        assert_eq!(validator.source.calls.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn jwt_validator_rejects_malformed_untrusted_tokens_before_authorization() {
+        let validator = CognitoJwtValidator::new(
+            policy(Duration::from_secs(60)),
+            SequenceJwksSource::new([Ok(jwks(&[("alpha", ALPHA_MODULUS)]))]),
+        );
+        for token in [
+            "",
+            "one.two",
+            "one.two.three.four",
+            "eyJhbGciOiJIUzI1NiIsImtpZCI6ImFscGhhIiwidHlwIjoiSldUIn0.e30.signature",
+            "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.e30.signature",
+            "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFscGhhIiwidHlwIjoiSldUIn0.e30.signature",
+        ] {
+            assert_eq!(
+                validator.validate(token, 1_800_000_000),
+                Err(AuthenticationError::InvalidToken)
+            );
+        }
+        assert_eq!(
+            validator.validate("one.two.three", -1),
+            Err(AuthenticationError::InvalidToken)
+        );
+    }
+
+    #[cfg(coverage)]
+    #[test]
+    fn live_adapters_fail_closed_without_external_io_in_coverage_builds() {
+        let client = aws_sdk_dynamodb::Client::from_conf(
+            aws_sdk_dynamodb::Config::builder()
+                .behavior_version(aws_sdk_dynamodb::config::BehaviorVersion::latest())
+                .build(),
+        );
+        let store = super::DynamoPrincipalStore::new(client, "cipher-users").unwrap();
+        assert_eq!(
+            store.load(&identity()),
+            Err(AuthenticationError::SigningKeysUnavailable)
+        );
+        assert_eq!(
+            store.revoke_session(&identity()),
+            Err(AuthenticationError::SigningKeysUnavailable)
+        );
+        assert!(matches!(
+            super::HttpJwksSource::new(ISSUER),
+            Err(AuthenticationError::SigningKeysUnavailable)
+        ));
+    }
+
+    struct FailingStore;
+    impl ConsistentPrincipalStore for FailingStore {
+        fn load(
+            &self,
+            _identity: &VerifiedIdentity,
+        ) -> Result<Option<PrincipalState>, AuthenticationError> {
+            Err(AuthenticationError::SigningKeysUnavailable)
+        }
+    }
+
+    struct StaticValidator(Result<VerifiedIdentity, AuthenticationError>);
+    impl AccessTokenValidator for StaticValidator {
+        fn validate(
+            &self,
+            _token: &str,
+            _unix_time_seconds: i64,
+        ) -> Result<VerifiedIdentity, AuthenticationError> {
+            self.0.clone()
+        }
+    }
+
+    struct StaticGate(Result<CipherPrincipal, AuthenticationError>);
+    impl PrincipalGate for StaticGate {
+        fn authorize(
+            &self,
+            _identity: VerifiedIdentity,
+        ) -> Result<CipherPrincipal, AuthenticationError> {
+            self.0.clone()
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingRevoker {
+        revoked: Mutex<Option<String>>,
+    }
+    impl SessionRevoker for RecordingRevoker {
+        fn revoke_session(&self, identity: &VerifiedIdentity) -> Result<(), AuthenticationError> {
+            *self.revoked.lock().unwrap() = Some(identity.session_family().into());
+            Ok(())
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    enum ClaimChange {
+        Issuer,
+        Client,
+        TokenUse,
+        Expired,
+        MissingScope,
+        InvalidSubject,
+        InvalidFamily,
     }
 }

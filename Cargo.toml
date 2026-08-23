@@ -28,6 +28,7 @@ tracing-subscriber = { version = "^0.3.23", features = ["env-filter"] }
 [workspace.lints.rust]
 missing_docs = "warn"
 unsafe_code = "forbid"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
 
 [workspace.lints.clippy]
 dbg_macro = "deny"

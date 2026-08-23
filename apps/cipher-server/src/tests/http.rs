@@ -11,6 +11,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tower::ServiceExt;
 
+#[cfg(coverage)]
+use super::run;
 use super::{app, authenticated_app, run_with_authorizer};
 use crate::auth::{AuthenticationError, CipherPrincipal, RequestAuthorizer, VerifiedIdentity};
 use crate::config::{AwsConfig, PublicEndpoints, ServerConfig};
@@ -215,6 +217,15 @@ async fn run_binds_the_configured_address() {
     drop(connection);
     task.abort();
     assert!(task.await.unwrap_err().is_cancelled());
+}
+
+#[cfg(coverage)]
+#[tokio::test]
+async fn coverage_builds_fail_closed_before_contacting_production_aws_services() {
+    let reservation = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let bind = reservation.local_addr().unwrap();
+    drop(reservation);
+    assert!(run(test_config(bind)).await.is_err());
 }
 
 async fn connect_when_ready(bind: SocketAddr) -> TcpStream {

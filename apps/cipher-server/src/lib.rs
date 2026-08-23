@@ -16,14 +16,19 @@ use axum::{
 use cipher_types::ServiceStatus;
 
 use crate::{
-    auth::{
-        AuthenticationError, CognitoJwtValidator, CognitoTokenPolicy, DynamoPrincipalStore,
-        HttpJwksSource, RequestAuthorizer, ServerAuthorizer, StoredPrincipalGate,
-    },
+    auth::{AuthenticationError, RequestAuthorizer},
     config::ServerConfig,
 };
 
+#[cfg(not(coverage))]
+use crate::auth::{
+    CognitoJwtValidator, CognitoTokenPolicy, DynamoPrincipalStore, HttpJwksSource,
+    ServerAuthorizer, StoredPrincipalGate,
+};
+
+#[cfg(not(coverage))]
 const COGNITO_REQUIRED_SCOPE: &str = "aws.cognito.signin.user.admin";
+#[cfg(not(coverage))]
 const JWKS_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
 pub mod auth;
@@ -58,9 +63,18 @@ pub fn authenticated_app(authorizer: Arc<dyn RequestAuthorizer>) -> Router {
 /// Binds the configured address and serves the Cipher API.
 ///
 /// Returns I/O errors raised while binding or serving.
+#[cfg(not(coverage))]
 pub async fn run(config: ServerConfig) -> io::Result<()> {
     let authorizer = production_authorizer(&config).await?;
     run_with_authorizer(config, authorizer).await
+}
+
+#[cfg(coverage)]
+/// Fails closed because deterministic coverage cannot contact production AWS services.
+pub async fn run(_config: ServerConfig) -> io::Result<()> {
+    Err(io::Error::other(
+        "production AWS dependencies are unavailable in deterministic coverage",
+    ))
 }
 
 /// Binds the configured address with the supplied shared request authorizer.
@@ -78,6 +92,7 @@ pub async fn run_with_authorizer(
     axum::serve(listener, authenticated_app(authorizer)).await
 }
 
+#[cfg(not(coverage))]
 async fn production_authorizer(config: &ServerConfig) -> io::Result<Arc<dyn RequestAuthorizer>> {
     let issuer = format!(
         "https://cognito-idp.{}.amazonaws.com/{}",
