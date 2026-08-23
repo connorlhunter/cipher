@@ -261,6 +261,39 @@ impl DesktopAuthenticationService {
             Ok(runtime) => runtime,
             Err(error) => return failure(*error),
         };
+        match request {
+            AuthenticationRequest::BeginPasswordReset { identifier } => {
+                return match runtime
+                    .authenticator
+                    .begin_password_reset(identifier, cancellation)
+                    .await
+                {
+                    Ok(()) => AuthenticationView {
+                        state: AuthenticationViewState::PasswordResetRequired,
+                        message: "If an account is eligible, a recovery code is on its way.",
+                    },
+                    Err(error) => failure(error),
+                };
+            }
+            AuthenticationRequest::ConfirmPasswordReset {
+                identifier,
+                code,
+                new_password,
+            } => {
+                return match runtime
+                    .authenticator
+                    .confirm_password_reset(identifier, code, new_password, cancellation)
+                    .await
+                {
+                    Ok(()) => AuthenticationView {
+                        state: AuthenticationViewState::PasswordResetComplete,
+                        message: "Password updated. Sign in with your new password.",
+                    },
+                    Err(error) => failure(error),
+                };
+            }
+            _ => {}
+        }
         if let Err(error) = self.install_refresher(session, cancellation) {
             return failure(error);
         }

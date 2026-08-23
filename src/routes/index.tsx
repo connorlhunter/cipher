@@ -13,7 +13,7 @@ import { Badge } from "../components/ui/badge";
 import { buttonVariants } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ThemePreferenceControl } from "../features/theme/theme-preference-control";
-import { SignInForm } from "../features/auth/sign-in-form";
+import { PasswordResetForm, SignInForm } from "../features/auth/sign-in-form";
 import { cn } from "../lib/utils";
 
 /** A safe fallback for route-level failures that never serializes the original error. */
@@ -120,6 +120,15 @@ export function SignInRoute(): JSX.Element {
   );
 }
 
+/** Account recovery is a dedicated route instead of an in-form detour. */
+export function PasswordResetRoute(): JSX.Element {
+  return (
+    <section className="mx-auto grid min-h-full max-w-3xl place-items-center py-5 lg:py-9">
+      <PasswordResetForm />
+    </section>
+  );
+}
+
 const rootRoute = createRootRoute({
   component: DesktopShell,
   errorComponent: RouteErrorFallback,
@@ -143,7 +152,18 @@ const signInRoute = createRoute({
   component: SignInRoute,
 });
 
-const routeTree = rootRoute.addChildren([overviewRoute, appearanceRoute, signInRoute]);
+const passwordResetRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/password-reset",
+  component: PasswordResetRoute,
+});
+
+const routeTree = rootRoute.addChildren([
+  overviewRoute,
+  appearanceRoute,
+  signInRoute,
+  passwordResetRoute,
+]);
 
 /** The in-memory router avoids putting sensitive state into location history. */
 export const router = createRouter({

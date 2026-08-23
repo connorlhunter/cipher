@@ -1,8 +1,8 @@
 import {
-  CircleHelp,
   KeyRound,
   LayoutPanelTop,
   LockKeyhole,
+  LogIn,
   MessageSquare,
   Settings2,
   Sparkles,
@@ -18,7 +18,8 @@ import { focusRouteContent, RouteFocusRestoration } from "./focus-restoration";
 
 const navigation = [
   { icon: LayoutPanelTop, label: "Overview", to: "/" },
-  { icon: KeyRound, label: "Sign in", to: "/sign-in" },
+  { icon: LogIn, label: "Sign in", to: "/sign-in" },
+  { icon: KeyRound, label: "Password reset", to: "/password-reset" },
   { icon: Settings2, label: "Appearance", to: "/settings/appearance" },
 ] as const;
 
@@ -75,10 +76,6 @@ export function DesktopShell(): JSX.Element {
         <div className="mt-auto pt-5">
           <Separator />
           <div className="mt-3 grid gap-2 px-3">
-            <div className="type-caption flex min-h-control items-center gap-3 text-muted">
-              <CircleHelp aria-hidden="true" size={18} strokeWidth={1.8} />
-              Security-first desktop
-            </div>
             <Badge
               aria-label="End-to-end encryption"
               className="size-7 justify-center border-transparent bg-transparent px-0 text-muted opacity-75"
