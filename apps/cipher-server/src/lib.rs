@@ -86,7 +86,7 @@ async fn authenticated_api_descriptor(
 ) -> Response {
     match authorize(&headers, authorizer.as_ref()) {
         Ok(()) => api_descriptor().await,
-        Err(response) => response,
+        Err(response) => *response,
     }
 }
 
@@ -103,28 +103,28 @@ async fn authenticated_realtime(
 ) -> Response {
     match authorize(&headers, authorizer.as_ref()) {
         Ok(()) => realtime(upgrade).await.into_response(),
-        Err(response) => response,
+        Err(response) => *response,
     }
 }
 
 fn authorize(
     headers: &axum::http::HeaderMap,
     authorizer: &dyn RequestAuthorizer,
-) -> Result<(), Response> {
+) -> Result<(), Box<Response>> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| {
-            http_contract::failure(
+            Box::new(http_contract::failure(
                 http_contract::ApiErrorCode::Unavailable,
                 http_contract::ResponseMeta::with_request_id(http_contract::new_request_id()),
-            )
+            ))
         })?
         .as_secs();
     let now = i64::try_from(now).map_err(|_| {
-        http_contract::failure(
+        Box::new(http_contract::failure(
             http_contract::ApiErrorCode::Unavailable,
             http_contract::ResponseMeta::with_request_id(http_contract::new_request_id()),
-        )
+        ))
     })?;
     authorizer
         .authorize_request(headers, now)
@@ -138,10 +138,10 @@ fn authorize(
                 | AuthenticationError::InvalidToken
                 | AuthenticationError::Revoked => http_contract::ApiErrorCode::Unauthenticated,
             };
-            http_contract::failure(
+            Box::new(http_contract::failure(
                 code,
                 http_contract::ResponseMeta::with_request_id(http_contract::new_request_id()),
-            )
+            ))
         })
 }
 

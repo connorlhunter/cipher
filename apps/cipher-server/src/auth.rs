@@ -85,6 +85,71 @@ pub trait PrincipalGate: Send + Sync {
     -> Result<CipherPrincipal, AuthenticationError>;
 }
 
+/// One atomically read application authorization record.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PrincipalState {
+    /// Immutable Cipher user mapped from the Cognito subject.
+    pub user_id: String,
+    /// Device bound to the current session.
+    pub device_id: String,
+    /// Session identified by the access-token family.
+    pub session_id: String,
+    /// Whether the Cipher user remains enabled.
+    pub user_enabled: bool,
+    /// Whether the bound device remains active.
+    pub device_active: bool,
+    /// Whether the bound session remains active.
+    pub session_active: bool,
+}
+
+/// Performs the one strongly consistent identity/session/device lookup.
+///
+/// A production DynamoDB implementation must read all three authorization
+/// records in one consistent transaction or reject the request. Separating
+/// them into eventual reads would permit a revoked session to race a request.
+pub trait ConsistentPrincipalStore: Send + Sync {
+    /// Resolves the current Cipher authorization state for a verified subject.
+    fn load(&self, subject: &str) -> Result<Option<PrincipalState>, AuthenticationError>;
+}
+
+/// Applies Cipher's revocation policy to one strongly consistent state record.
+pub struct StoredPrincipalGate<S> {
+    store: S,
+}
+
+impl<S> StoredPrincipalGate<S> {
+    /// Creates the application-state gate used after JWT verification.
+    pub fn new(store: S) -> Self {
+        Self { store }
+    }
+}
+
+impl<S: ConsistentPrincipalStore> PrincipalGate for StoredPrincipalGate<S> {
+    fn authorize(
+        &self,
+        identity: VerifiedIdentity,
+    ) -> Result<CipherPrincipal, AuthenticationError> {
+        let Some(state) = self.store.load(identity.subject())? else {
+            return Err(AuthenticationError::Revoked);
+        };
+        if !state.user_enabled
+            || !state.device_active
+            || !state.session_active
+            || !opaque_identifier(&state.user_id, "usr_")
+            || !opaque_identifier(&state.device_id, "dev_")
+            || !opaque_identifier(&state.session_id, "ses_")
+        {
+            return Err(AuthenticationError::Revoked);
+        }
+        Ok(CipherPrincipal {
+            identity,
+            user_id: state.user_id,
+            device_id: state.device_id,
+            session_id: state.session_id,
+        })
+    }
+}
+
 /// The safe category of a rejected authentication attempt.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AuthenticationError {
@@ -379,11 +444,24 @@ fn base64url(value: &str, maximum: usize) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
 }
 
+fn opaque_identifier(value: &str, prefix: &str) -> bool {
+    value.strip_prefix(prefix).is_some_and(|suffix| {
+        !suffix.is_empty()
+            && suffix.len() <= 128
+            && suffix
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use axum::http::{HeaderMap, HeaderValue};
 
-    use super::{AuthenticationError, VerifiedIdentity, bearer_token};
+    use super::{
+        AuthenticationError, ConsistentPrincipalStore, PrincipalGate, PrincipalState,
+        StoredPrincipalGate, VerifiedIdentity, bearer_token,
+    };
 
     #[test]
     fn bearer_token_rejects_missing_wrong_scheme_and_multiple_tokens() {
@@ -422,5 +500,65 @@ mod tests {
             VerifiedIdentity::new("sub", -1),
             Err(AuthenticationError::InvalidToken)
         );
+    }
+
+    #[test]
+    fn state_gate_rejects_each_revoked_application_record() {
+        for state in [
+            None,
+            Some(PrincipalState {
+                user_id: "usr_1".into(),
+                device_id: "dev_1".into(),
+                session_id: "ses_1".into(),
+                user_enabled: false,
+                device_active: true,
+                session_active: true,
+            }),
+            Some(PrincipalState {
+                user_id: "usr_1".into(),
+                device_id: "dev_1".into(),
+                session_id: "ses_1".into(),
+                user_enabled: true,
+                device_active: false,
+                session_active: true,
+            }),
+            Some(PrincipalState {
+                user_id: "usr_1".into(),
+                device_id: "dev_1".into(),
+                session_id: "ses_1".into(),
+                user_enabled: true,
+                device_active: true,
+                session_active: false,
+            }),
+        ] {
+            let gate = StoredPrincipalGate::new(TestStore(state));
+            assert_eq!(
+                gate.authorize(VerifiedIdentity::new("sub_1", 1).unwrap()),
+                Err(AuthenticationError::Revoked)
+            );
+        }
+    }
+
+    #[test]
+    fn state_gate_only_allows_an_active_bounded_principal() {
+        let gate = StoredPrincipalGate::new(TestStore(Some(PrincipalState {
+            user_id: "usr_1".into(),
+            device_id: "dev_1".into(),
+            session_id: "ses_1".into(),
+            user_enabled: true,
+            device_active: true,
+            session_active: true,
+        })));
+        let principal = gate
+            .authorize(VerifiedIdentity::new("sub_1", 1).unwrap())
+            .unwrap();
+        assert_eq!(principal.user_id, "usr_1");
+    }
+
+    struct TestStore(Option<PrincipalState>);
+    impl ConsistentPrincipalStore for TestStore {
+        fn load(&self, _subject: &str) -> Result<Option<PrincipalState>, AuthenticationError> {
+            Ok(self.0.clone())
+        }
     }
 }
