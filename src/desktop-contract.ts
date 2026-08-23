@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * The current native-to-webview contract version.
  *
@@ -13,6 +15,8 @@ export const desktopProtocol = {
 export const desktopCommands = {
   status: "desktop_status",
   diagnostics: "desktop_diagnostics",
+  theme: "desktop_theme",
+  setTheme: "desktop_set_theme",
 } as const;
 
 /** The largest display-only status message accepted from the native core. */
@@ -46,6 +50,24 @@ export interface DesktopDiagnostics {
   coldStarts: number;
   wakes: number;
 }
+
+/** The one application-wide appearance preference owned by the native core. */
+export const desktopThemePreferences = ["system", "light", "dark"] as const;
+
+/** A concrete appearance resolved by the native window manager. */
+export const resolvedDesktopThemes = ["light", "dark"] as const;
+
+export type DesktopThemePreference = (typeof desktopThemePreferences)[number];
+export type ResolvedDesktopTheme = (typeof resolvedDesktopThemes)[number];
+
+/** A safe, content-free theme view supplied by the native desktop core. */
+export interface DesktopTheme {
+  preference: DesktopThemePreference;
+  resolved: ResolvedDesktopTheme;
+}
+
+/** A no-payload signal that asks the webview to re-read the native theme view. */
+export const desktopThemeChangedEvent = "cipher://theme/changed";
 
 /** Typed error codes that can cross the native boundary. */
 export type DesktopIpcErrorCode =
@@ -116,6 +138,23 @@ export function parseDesktopDiagnostics(value: unknown): DesktopDiagnostics {
     coldStarts: value.coldStarts,
     wakes: value.wakes,
   };
+}
+
+/** Validates the native-owned, resolved theme before it reaches the application shell. */
+export function parseDesktopTheme(value: unknown): DesktopTheme {
+  const result = z
+    .object({
+      preference: z.enum(desktopThemePreferences),
+      resolved: z.enum(resolvedDesktopThemes),
+    })
+    .strict()
+    .safeParse(value);
+
+  if (!result.success) {
+    throw new Error("The desktop core returned an invalid theme.");
+  }
+
+  return Object.freeze({ ...result.data });
 }
 
 /** Returns whether a desktop protocol version is temporarily compatible. */

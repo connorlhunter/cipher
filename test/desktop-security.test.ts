@@ -63,16 +63,27 @@ describe("desktop trust-boundary configuration", () => {
       identifier: "main-webview",
       local: true,
       platforms: ["macOS", "windows"],
-      permissions: ["allow-desktop-status", "allow-desktop-diagnostics"],
+      permissions: [
+        "allow-desktop-status",
+        "allow-desktop-diagnostics",
+        "allow-desktop-theme",
+        "allow-desktop-set-theme",
+      ],
       webviews: ["main"],
     });
     expect(capability.remote).toBeUndefined();
     expect(capability.windows).toBeUndefined();
-    expect(buildScript).toContain('commands(&["desktop_status", "desktop_diagnostics"])');
+    expect(buildScript).toContain('"desktop_theme"');
+    expect(buildScript).toContain('"desktop_set_theme"');
   });
 
   test("does not expose file, shell, or external-opening permissions", () => {
-    expect(capability.permissions).toEqual(["allow-desktop-status", "allow-desktop-diagnostics"]);
+    expect(capability.permissions).toEqual([
+      "allow-desktop-status",
+      "allow-desktop-diagnostics",
+      "allow-desktop-theme",
+      "allow-desktop-set-theme",
+    ]);
     expect(JSON.stringify(capability)).not.toMatch(/(?:fs|shell|opener):/u);
     expect(desktopManifest).not.toMatch(/tauri-plugin-(?:fs|shell|opener)/u);
   });

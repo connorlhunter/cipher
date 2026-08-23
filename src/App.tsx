@@ -1,24 +1,19 @@
+import { RouterProvider } from "@tanstack/react-router";
 import { type JSX, useEffect, useState } from "react";
 
-import { desktopStatus, listenForRendererPurgeEvents, type DesktopStatus } from "./desktop";
+import { router } from "./routes";
+import { listenForRendererPurgeEvents } from "./desktop";
 import {
   createBrowserRendererDataLifetime,
   type RendererDataLifetime,
 } from "./renderer-data-lifetime";
+import { ThemeProvider } from "./features/theme/theme-provider";
 
 /**
- * @returns The desktop shell and its current native-core status.
+ * @returns The desktop shell and its native lifecycle cleanup boundary.
  */
 export function App(): JSX.Element {
-  const [status, setStatus] = useState<DesktopStatus | null>(null);
-  const [failed, setFailed] = useState(false);
   const [rendererData] = useState<RendererDataLifetime>(() => createBrowserRendererDataLifetime());
-
-  useEffect(() => {
-    void desktopStatus()
-      .then(setStatus)
-      .catch(() => setFailed(true));
-  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -47,15 +42,8 @@ export function App(): JSX.Element {
   }, [rendererData]);
 
   return (
-    <main>
-      <p className="eyebrow">Cipher</p>
-      <h1>Desktop shell</h1>
-      <p>Native login and encrypted messaging will be added here.</p>
-      <p className="status">
-        {failed
-          ? "Unable to reach the desktop core."
-          : (status?.message ?? "Starting desktop core...")}
-      </p>
-    </main>
+    <ThemeProvider>
+      <RouterProvider router={router} />
+    </ThemeProvider>
   );
 }
