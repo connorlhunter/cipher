@@ -1,6 +1,6 @@
 import { useForm } from "@tanstack/react-form";
 import { useMutation } from "@tanstack/react-query";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, LockKeyhole } from "lucide-react";
 import { type JSX, useEffect, useId, useState } from "react";
 import { z } from "zod";
 
@@ -84,7 +84,14 @@ export function SignInForm({
 
   return (
     <Card className="w-full max-w-md p-panel">
-      <Badge tone="neutral">Secure sign-in</Badge>
+      <Badge
+        aria-label="End-to-end encryption"
+        title="End-to-end encrypted: only you and the people you message can read your conversations."
+        tone="neutral"
+      >
+        <LockKeyhole aria-hidden="true" className="mr-1" size={13} strokeWidth={1.8} />
+        E2EE
+      </Badge>
       <h1 className="type-page-title mt-paragraph">Welcome to Cipher</h1>
       <p className="type-body-muted mt-paragraph">Sign in to continue.</p>
       {challengeRequired ? (

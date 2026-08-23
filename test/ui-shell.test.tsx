@@ -30,7 +30,8 @@ Object.assign(globalThis, {
 const { act, cleanup, render, screen } = await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
 const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
-const { RouterProvider } = await import("@tanstack/react-router");
+const { RouterProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } =
+  await import("@tanstack/react-router");
 const { router } = await import("../src/routes");
 const { RouteFocusFrame } = await import("../src/app/focus-restoration");
 const { SignInForm } = await import("../src/features/auth/sign-in-form");
@@ -202,6 +203,9 @@ describe("desktop shell accessibility", () => {
     expect(screen.getByRole("navigation", { name: "Primary" })).toBeDefined();
     expect(screen.getByRole("main")).toBeDefined();
     expect(screen.getByRole("complementary", { name: "Workspace context" })).toBeDefined();
+    expect(screen.getByRole("img", { name: "End-to-end encryption" }).getAttribute("title")).toBe(
+      "End-to-end encrypted: only you and the people you message can read your conversations.",
+    );
 
     const user = userEvent.setup({ document: browser.document as unknown as Document });
     await user.tab();
@@ -320,10 +324,27 @@ describe("desktop shell accessibility", () => {
     expect(requests.map((request) => request.flow)).toEqual(["sign_in", "continue_challenge"]);
   });
 
-  test("keeps overview and appearance copy short and centered on the project", () => {
-    render(<OverviewRoute />);
-    expect(screen.getByRole("img", { name: "Cipher" })).toBeDefined();
-    expect(screen.getByText("Private, secure messaging for the people you trust.")).toBeDefined();
+  test("keeps overview and appearance copy short and centered on the project", async () => {
+    const rootRoute = createRootRoute();
+    const overviewRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/",
+      component: OverviewRoute,
+    });
+    const overviewRouter = createRouter({
+      history: createMemoryHistory({ initialEntries: ["/"] }),
+      routeTree: rootRoute.addChildren([overviewRoute]),
+    });
+    render(<RouterProvider router={overviewRouter} />);
+    expect(await screen.findByRole("img", { name: "Cipher" })).toBeDefined();
+    expect(
+      screen.getByText("A private space for the conversations that matter most."),
+    ).toBeDefined();
+    expect(screen.getByText("Built for E2EE")).toBeDefined();
+    expect(screen.getByRole("link", { name: "Log in" }).getAttribute("href")).toBe("/sign-in");
+    expect((screen.getByRole("button", { name: "Sign up" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     cleanup();
     render(
       <ThemeProvider
