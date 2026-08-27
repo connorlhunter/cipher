@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.0-prealpha.11] - 2026-08-27
+
+### Fixed
+
+- Cover release publication helpers and route failure handling while restoring the required TypeScript coverage gate.
+
 ## [0.1.0-prealpha.10] - 2026-08-27
 
 ### Added
