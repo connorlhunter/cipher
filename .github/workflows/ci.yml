@@ -60,8 +60,10 @@ jobs:
           CIPHER_PULL_REQUEST_AUTHOR: ${{ github.event.pull_request.user.login }}
           CIPHER_PULL_REQUEST_BODY: ${{ github.event.pull_request.body }}
       - run: bun audit --audit-level=high
+      - run: bun run version:check
       - run: bun run check:frontend
       - run: bun run test:frontend
+      - run: bun run changelog:build
       - run: bun run web:build
 
   native:

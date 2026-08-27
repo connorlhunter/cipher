@@ -1,140 +1,82 @@
-import { existsSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-import { pathToFileURL } from "node:url";
-import puppeteer from "puppeteer";
-import { coveragePaths } from "./coverage-paths";
-import { pdfBrowserLaunchOptions } from "./pdf-browser";
+import { createWriteStream, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import PDFDocument from "pdfkit";
+import type { CoverageArtifact, CoverageMetric } from "./render-coverage-report";
 
-/** PDF paths produced for one coverage publication. */
 export interface RenderedCoveragePdfs {
   readonly overview: string;
-  readonly rust: string;
-  readonly typescript: string;
 }
 
-/** Narrow PDF options needed by the coverage renderer. */
-export interface CoveragePdfOptions {
-  readonly format?: "Letter";
-  readonly landscape?: boolean;
-  readonly margin?: {
-    readonly bottom?: string;
-    readonly left?: string;
-    readonly right?: string;
-    readonly top?: string;
-  };
-  readonly path?: string;
-  readonly printBackground?: boolean;
+function metricText(metric: CoverageMetric): string {
+  const percentage = metric.found === 0 ? 100 : (metric.covered / metric.found) * 100;
+  return `${percentage.toFixed(2)}% (${metric.covered}/${metric.found})`;
 }
 
-/** Page operations used while printing a coverage report. */
-export interface CoveragePdfPage {
-  close(): Promise<void>;
-  emulateMediaType(type?: string): Promise<void>;
-  goto(url: string, options?: { readonly waitUntil?: "networkidle0" }): Promise<unknown>;
-  pdf(options?: CoveragePdfOptions): Promise<Uint8Array>;
-}
-
-/** Browser operations used while printing coverage reports. */
-export interface CoveragePdfBrowser {
-  close(): Promise<void>;
-  newPage(): Promise<CoveragePdfPage>;
-}
-
-/** Opens the browser used to print coverage reports. */
-export type CoveragePdfBrowserLauncher = () => Promise<CoveragePdfBrowser>;
-
-/** Optional collaborators for PDF rendering. */
-export interface RenderCoveragePdfsOptions {
-  readonly launchBrowser?: CoveragePdfBrowserLauncher;
-}
-
-/**
- * Renders Cipher's overview, TypeScript, and Rust coverage pages as PDFs.
- *
- * @param workspaceRoot - Cipher checkout containing the coverage pages.
- * @returns Every generated PDF path.
- */
+/** Renders Cipher coverage from its JSON artifact without a browser. */
 export async function renderCoveragePdfs(
   workspaceRoot = process.cwd(),
-  options: RenderCoveragePdfsOptions = {},
 ): Promise<RenderedCoveragePdfs> {
-  const paths = coveragePaths(workspaceRoot);
+  const directory = join(workspaceRoot, "coverage");
+  const json = join(directory, "index.json");
+  const pdf = join(directory, "coverage.pdf");
+  if (!existsSync(json)) throw new Error(`Missing coverage artifact: ${json}.`);
+  const coverage = JSON.parse(readFileSync(json, "utf8")) as CoverageArtifact;
+  mkdirSync(dirname(pdf), { recursive: true });
 
-  for (const input of [paths.overview.html, paths.typescript.html, paths.rust.html]) {
-    if (!existsSync(input)) {
-      throw new Error(`Missing coverage report: ${input}. Render coverage HTML first.`);
-    }
-  }
-
-  const launchBrowser =
-    options.launchBrowser ??
-    (() => puppeteer.launch(pdfBrowserLaunchOptions(process.env.CI === "true")));
-  const browser = await launchBrowser();
-
-  try {
-    await renderPdf(browser, paths.overview.html, paths.overview.pdf);
-    await renderPdf(browser, paths.typescript.html, paths.typescript.pdf);
-    await renderPdf(browser, paths.rust.html, paths.rust.pdf);
-  } finally {
-    await browser.close();
-  }
-
-  console.log(
-    `Rendered coverage PDFs: ${paths.overview.pdf}, ${paths.typescript.pdf}, ${paths.rust.pdf}`,
-  );
-
-  return { overview: paths.overview.pdf, rust: paths.rust.pdf, typescript: paths.typescript.pdf };
-}
-
-/** Runs PDF rendering and reports a non-sensitive CLI failure. */
-export async function renderCoveragePdfsCli(
-  render?: () => Promise<unknown>,
-  errorLog: (message: string) => void = console.error,
-): Promise<boolean> {
-  try {
-    await (render ?? renderCoveragePdfs)();
-    return true;
-  } catch (error) {
-    errorLog(error instanceof Error ? error.message : String(error));
-    return false;
-  }
-}
-
-/**
- * Prints one local HTML page with the shared browser instance.
- *
- * @param browser - Open Puppeteer browser.
- * @param input - HTML report path.
- * @param output - PDF destination.
- */
-async function renderPdf(
-  browser: CoveragePdfBrowser,
-  input: string,
-  output: string,
-): Promise<void> {
-  mkdirSync(dirname(output), { recursive: true });
-  const page = await browser.newPage();
-
-  try {
-    await page.emulateMediaType("print");
-    await page.goto(pathToFileURL(input).href, { waitUntil: "networkidle0" });
-    await page.pdf({
-      format: "Letter",
-      landscape: true,
-      margin: {
-        bottom: "0.45in",
-        left: "0.45in",
-        right: "0.45in",
-        top: "0.45in",
-      },
-      path: output,
-      printBackground: true,
+  await new Promise<void>((resolve, reject) => {
+    const document = new PDFDocument({
+      info: { Title: "Cipher Coverage" },
+      margin: 48,
+      size: "LETTER",
     });
-  } finally {
-    await page.close();
-  }
+    const stream = createWriteStream(pdf);
+    document.pipe(stream);
+    stream.on("finish", resolve);
+    stream.on("error", reject);
+    document.font("Helvetica-Bold").fontSize(22).fillColor("#17202a").text("Cipher Coverage");
+    document
+      .moveDown(0.35)
+      .font("Helvetica")
+      .fontSize(10)
+      .fillColor("#667085")
+      .text(
+        `Updated ${coverage.updatedAt}. Required minimum: ${coverage.minimumCoverage.lines}% lines and ${coverage.minimumCoverage.functions}% functions.`,
+      );
+    for (const surface of coverage.surfaces) {
+      document
+        .moveDown(0.9)
+        .font("Helvetica-Bold")
+        .fontSize(14)
+        .fillColor("#0f6b7a")
+        .text(surface.label);
+      document
+        .moveDown(0.25)
+        .font("Helvetica")
+        .fontSize(10)
+        .fillColor("#17202a")
+        .text(
+          `All files: lines ${metricText(surface.totals.lines)}, functions ${metricText(surface.totals.functions)}`,
+        );
+      for (const file of surface.files) {
+        document
+          .moveDown(0.2)
+          .fontSize(9)
+          .text(
+            `${file.path}: lines ${metricText(file.lines)}, functions ${metricText(file.functions)}`,
+          );
+      }
+    }
+    document.end();
+  });
+  console.log(`Rendered coverage PDF: ${pdf}`);
+  return { overview: pdf };
 }
 
 if (import.meta.main) {
-  if (!(await renderCoveragePdfsCli())) process.exit(1);
+  try {
+    await renderCoveragePdfs();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
 }
