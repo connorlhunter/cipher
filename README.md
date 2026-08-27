@@ -8,7 +8,7 @@ Project docs and diagrams: <https://connorhunter.me/projects/cipher?viewer=docs#
 
 ## Development
 
-Run `bun run verify` before committing or pushing. The local gate requires the pinned CodeQL CLI as the literal `codeql` executable on `PATH`; `bun run codeql:scan` scans JavaScript/TypeScript, Rust, and GitHub Actions and keeps its ignored database, cache, and SARIF output under `.codeql/`.
+Run `bun run verify` before committing or pushing. Web formatting, linting, type checks, builds, and local development use Vite+ through the `bun run` commands. Use `bun run check:frontend` for the web-only gate or `bun run check` to include Rust and infrastructure checks. The local gate requires the pinned CodeQL CLI as the literal `codeql` executable on `PATH`; `bun run codeql:scan` scans JavaScript/TypeScript, Rust, and GitHub Actions and keeps its ignored database, cache, and SARIF output under `.codeql/`.
 
 Branches use `<type>/<kebab-case-name>` and commits use `<type>[(scope)][!]: <imperative summary>`, where `<type>` is `feat`, `fix`, `chore`, `docs`, `test`, or `refactor`. Issue and pull request subjects use the same commit format; the issue forms supply the appropriate prefix.
 

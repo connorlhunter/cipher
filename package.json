@@ -28,8 +28,10 @@
     "desktop:build": "bun scripts/run-tauri.ts build",
     "desktop:build:debug": "bun scripts/run-tauri.ts build --debug --bundles app",
     "desktop:dev": "bun scripts/run-tauri.ts dev",
-    "format": "bun x prettier --write . --ignore-unknown && cargo fmt",
-    "format:check": "bun x prettier --check . --ignore-unknown && cargo fmt --check",
+    "check": "bun run check:frontend && cargo fmt --check && cargo clippy --workspace --all-targets -- -D warnings && npm --prefix infra run typecheck",
+    "check:frontend": "vp check",
+    "format": "vp fmt && cargo fmt",
+    "format:check": "vp fmt --check && cargo fmt --check",
     "infra:install": "npm --prefix infra ci",
     "infra:destroy-all": "bun scripts/infra-control.ts destroy-all",
     "infra:certificate": "bun scripts/provision-production-certificate.ts",
@@ -38,7 +40,7 @@
     "infra:readiness": "bun scripts/infra-readiness.ts",
     "infra:resume": "bun scripts/infra-control.ts resume",
     "infra:synth": "npm --prefix infra run synth",
-    "lint": "bun x eslint . && cargo clippy --workspace --all-targets -- -D warnings",
+    "lint": "vp lint && cargo clippy --workspace --all-targets -- -D warnings",
     "naming:check": "bun scripts/change-naming.ts --branch",
     "prepare": "bun scripts/setup-git-hooks.ts",
     "server:dev": "cargo run --locked -p cipher-server",
@@ -48,12 +50,12 @@
     "test:infra": "npm --prefix infra run test",
     "test:rust": "cargo test --workspace --locked",
     "toolchain:check": "bun scripts/check-toolchain.ts",
-    "typecheck": "bun x tsgo --build --pretty false && npm --prefix infra run typecheck",
+    "typecheck": "vp check --no-fmt --no-lint && npm --prefix infra run typecheck",
     "version:check": "bun scripts/release-version.ts --check",
     "version:sync": "bun scripts/release-version.ts",
-    "verify": "bun run naming:check && bun run version:check && bun run toolchain:check && bun run audit && bun run codeql:scan && bun run format:check && bun run lint && bun run typecheck && bun run test && bun run web:build",
-    "web:build": "vite build",
-    "web:dev": "vite"
+    "verify": "bun run naming:check && bun run version:check && bun run toolchain:check && bun run audit && bun run check && bun run test && bun run web:build && bun run codeql:scan",
+    "web:build": "vp build",
+    "web:dev": "vp dev"
   },
   "dependencies": {
     "@tanstack/react-form": "^1.33.5",
@@ -70,9 +72,8 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@tauri-apps/cli": "^2.11.4",
     "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2.11.4",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.4",
     "@types/bun": "^1.3.14",
@@ -80,27 +81,14 @@
     "@types/react-dom": "^19.2.4",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "@vitejs/plugin-react": "^6.0.5",
-    "eslint": "^10.8.1",
-    "eslint-config-prettier": "^10.1.8",
     "happy-dom": "^20.11.2",
-    "lint-staged": "^17.3.0",
-    "prettier": "^3.9.6",
     "puppeteer": "^25.3.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.67.0",
-    "vite": "^8.2.1"
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.9",
+    "vite-plus": "0.2.9"
   },
-  "lint-staged": {
-    "*.{js,ts,tsx}": [
-      "bun x prettier --write",
-      "bun x eslint --fix"
-    ],
-    "*.{css,html,json,yml,yaml}": [
-      "bun x prettier --write"
-    ],
-    "*.rs": [
-      "cargo fmt --"
-    ]
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.9"
   }
 }

@@ -15,7 +15,6 @@ import {
   type DesktopStatus,
   type DesktopTheme,
   type DesktopThemePreference,
-  type DesktopThemeScheme,
 } from "./desktop-contract";
 import {
   subscribeToRendererPurgeEvents,
@@ -35,8 +34,9 @@ export {
   type DesktopStatus,
   type DesktopTheme,
   type DesktopThemePreference,
-  type DesktopThemeScheme,
 } from "./desktop-contract";
+
+export type { DesktopThemeScheme } from "./desktop-contract";
 
 /** One-time credentials accepted only by the native authentication command. */
 export type DesktopAuthenticationRequest =

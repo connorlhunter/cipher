@@ -59,6 +59,17 @@ export const desktopLifecycleStates = [
 /** The native transport states safe to show in a desktop diagnostics view. */
 export const nativeTransportStates = ["ready", "paused", "offline"] as const;
 
+const desktopDiagnosticsSchema = z
+  .object({
+    lifecycleState: z.enum(desktopLifecycleStates),
+    transportState: z.enum(nativeTransportStates),
+    rendererEpoch: z.number().safe().nonnegative(),
+    activeOperations: z.number().safe().nonnegative().max(32),
+    coldStarts: z.number().safe().nonnegative(),
+    wakes: z.number().safe().nonnegative(),
+  })
+  .strict();
+
 /** A bounded, content-free desktop diagnostics view. */
 export interface DesktopDiagnostics {
   lifecycleState: (typeof desktopLifecycleStates)[number];
@@ -119,7 +130,10 @@ export const desktopThemeChangedEvent = "cipher://theme/changed";
 
 /** Typed error codes that can cross the native boundary. */
 export type DesktopIpcErrorCode =
-  "cancelled" | "invalid_request" | "unsupported_version" | "unavailable";
+  | "cancelled"
+  | "invalid_request"
+  | "unsupported_version"
+  | "unavailable";
 
 /** A safe, bounded error shape for native command failures. */
 export interface DesktopIpcError {
@@ -186,41 +200,12 @@ export function parseDesktopRemovalView(value: unknown): DesktopRemovalView {
 
 /** Validates a bounded diagnostic export without accepting arbitrary native state. */
 export function parseDesktopDiagnostics(value: unknown): DesktopDiagnostics {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Object.keys(value).length !== 6 ||
-    !(
-      "lifecycleState" in value &&
-      "transportState" in value &&
-      "rendererEpoch" in value &&
-      "activeOperations" in value &&
-      "coldStarts" in value &&
-      "wakes" in value
-    ) ||
-    !desktopLifecycleStates.includes(
-      value.lifecycleState as (typeof desktopLifecycleStates)[number],
-    ) ||
-    !nativeTransportStates.includes(
-      value.transportState as (typeof nativeTransportStates)[number],
-    ) ||
-    !isSafeCounter(value.rendererEpoch) ||
-    !isSafeCounter(value.activeOperations) ||
-    value.activeOperations > 32 ||
-    !isSafeCounter(value.coldStarts) ||
-    !isSafeCounter(value.wakes)
-  ) {
+  const result = desktopDiagnosticsSchema.safeParse(value);
+  if (!result.success) {
     throw new Error("The desktop core returned invalid diagnostics.");
   }
 
-  return {
-    lifecycleState: value.lifecycleState as DesktopDiagnostics["lifecycleState"],
-    transportState: value.transportState as DesktopDiagnostics["transportState"],
-    rendererEpoch: value.rendererEpoch,
-    activeOperations: value.activeOperations,
-    coldStarts: value.coldStarts,
-    wakes: value.wakes,
-  };
+  return result.data;
 }
 
 /** Validates the native-owned, resolved theme before it reaches the application shell. */
@@ -253,8 +238,4 @@ export function parseDesktopTheme(value: unknown): DesktopTheme {
 /** Returns whether a desktop protocol version is temporarily compatible. */
 export function supportsDesktopProtocol(version: number): boolean {
   return version === desktopProtocol.current || version === desktopProtocol.previous;
-}
-
-function isSafeCounter(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }

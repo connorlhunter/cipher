@@ -57,7 +57,7 @@ export async function prepareCoveragePublication(
 
 /** Runs preparation and reports a non-sensitive CLI failure. */
 export async function prepareCoveragePublicationCli(
-  prepare: (() => Promise<unknown>) | undefined = undefined,
+  prepare?: () => Promise<unknown>,
   errorLog: (message: string) => void = console.error,
 ): Promise<boolean> {
   try {
