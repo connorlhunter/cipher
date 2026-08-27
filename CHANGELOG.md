@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.0-prealpha.9] - 2026-08-26
+
+### Added
+
+- Native Cognito sign-in, verification challenges, password recovery, session refresh, and authenticated HTTP and realtime requests.
+- The desktop design system, account and utility routes, and device-removal settings.
+
+### Changed
+
+- Replaced separate web formatting, linting, and type checks with Vite+, including a 15-path complexity limit for application source.
+- Streamlined native CI validation and stabilized the Tauri build target.
+
+### Fixed
+
+- Accepted additive SRP challenge metadata and refined authentication, welcome, overview, and sign-in feedback.
+- Kept desktop bootstrap out of coverage and preserved native CI check contexts.
+
 ## [0.1.0-prealpha.8] - 2026-08-22
 
 ### Added

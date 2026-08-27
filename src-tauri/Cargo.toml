@@ -23,9 +23,9 @@ aws-sdk-cognitoidentityprovider = { version = "^1.129.0", default-features = fal
 ] }
 base64 = "^0.22.1"
 chrono = { version = "^0.4.44", default-features = false, features = ["clock"] }
-cipher-desktop-lifecycle = { path = "../crates/cipher-desktop-lifecycle", version = "^0.1.0-prealpha.8" }
-cipher-types = { path = "../crates/cipher-types", version = "^0.1.0-prealpha.8" }
-cipher-native-transport = { path = "../crates/cipher-native-transport", version = "^0.1.0-prealpha.8" }
+cipher-desktop-lifecycle = { path = "../crates/cipher-desktop-lifecycle", version = "^0.1.0-prealpha.9" }
+cipher-types = { path = "../crates/cipher-types", version = "^0.1.0-prealpha.9" }
+cipher-native-transport = { path = "../crates/cipher-native-transport", version = "^0.1.0-prealpha.9" }
 crypto-bigint = { version = "^0.7.5", features = ["zeroize"] }
 hex = "^0.4.3"
 hmac = "^0.13.0"
