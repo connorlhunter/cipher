@@ -2,15 +2,24 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import {
+  desktopAuthenticate,
   desktopAuthenticateWith,
+  desktopDiagnostics,
   desktopDiagnosticsWith,
+  desktopRemoveCipher,
+  desktopStatus,
   desktopStatusWith,
+  desktopTheme,
   desktopThemeWith,
+  listenForDesktopThemeChanges,
   listenForDesktopThemeChangesWith,
+  listenForRendererPurgeEvents,
   parseDesktopDiagnostics,
   parseDesktopAuthenticationView,
+  parseDesktopRemovalView,
   parseDesktopStatus,
   parseDesktopTheme,
+  setDesktopTheme,
   setDesktopThemeWith,
 } from "../src/desktop";
 import {
@@ -105,6 +114,15 @@ describe("desktop authentication boundary", () => {
     { state: "failed", message: "Unavailable", token: "forbidden" },
   ])("rejects unsafe authentication output: %p", (value) => {
     expect(() => parseDesktopAuthenticationView(value)).toThrow("invalid authentication result");
+  });
+
+  test("accepts only a bounded native removal acknowledgement", () => {
+    expect(parseDesktopRemovalView({ message: "Closing Cipher." })).toEqual({
+      message: "Closing Cipher.",
+    });
+    expect(() => parseDesktopRemovalView({ message: "", token: "forbidden" })).toThrow(
+      "invalid removal result",
+    );
   });
 });
 
@@ -238,5 +256,24 @@ describe("desktop theme boundary", () => {
     await Promise.resolve();
     expect(refreshes).toBe(1);
     await stop();
+  });
+});
+
+describe("native bridge availability", () => {
+  test("fails safely when native commands are unavailable", async () => {
+    const request = {
+      flow: "sign_in" as const,
+      identifier: "cipher.user",
+      password: "Strong-password1!",
+    };
+
+    await expect(desktopAuthenticate(request)).rejects.toThrow();
+    await expect(desktopRemoveCipher(true)).rejects.toThrow();
+    await expect(desktopStatus()).rejects.toThrow();
+    await expect(desktopDiagnostics()).rejects.toThrow();
+    await expect(desktopTheme()).rejects.toThrow();
+    await expect(setDesktopTheme("rose")).rejects.toThrow();
+    await expect(listenForRendererPurgeEvents(async () => undefined)).rejects.toThrow();
+    await expect(listenForDesktopThemeChanges(async () => undefined)).rejects.toThrow();
   });
 });

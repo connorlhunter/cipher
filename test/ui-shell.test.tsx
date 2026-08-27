@@ -399,6 +399,29 @@ describe("desktop shell accessibility", () => {
     expect(screen.getByRole("button", { name: "Uninstall Cipher" })).toBeDefined();
   });
 
+  test("keeps the uninstall fallback contained to an installed Cipher app", async () => {
+    render(<UninstallRoute />);
+    const user = userEvent.setup({ document: browser.document as unknown as Document });
+
+    await user.click(screen.getByRole("button", { name: "Uninstall Cipher" }));
+    expect(screen.getByRole("group", { name: "Confirm uninstall" })).toBeDefined();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Uninstall Cipher" })).toBeDefined();
+
+    await user.click(screen.getByRole("button", { name: "Uninstall Cipher" }));
+    const removeCredentials = screen.getByRole("checkbox", {
+      name: "Remove saved credentials from this device",
+    }) as HTMLInputElement;
+    expect(removeCredentials.checked).toBe(true);
+    await user.click(removeCredentials);
+    expect(removeCredentials.checked).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Uninstall now" }));
+
+    expect((await screen.findByRole("status")).textContent).toContain(
+      "Uninstall is available from an installed Cipher app.",
+    );
+  });
+
   test("uses the dedicated invitation route without retaining account credentials", async () => {
     const requests: DesktopAuthenticationRequest[] = [];
     render(
