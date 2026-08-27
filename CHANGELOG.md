@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.0-prealpha.10] - 2026-08-27
+
+### Added
+
+- Publish project coverage as structured JSON with a direct PDF download.
+- Publish the canonical changelog as Markdown with a direct PDF download.
+
+### Fixed
+
+- Restore the enforced TypeScript coverage gate for release publication.
+
 ## [0.1.0-prealpha.9] - 2026-08-26
 
 ### Added
