@@ -4,7 +4,7 @@ Secure realtime messaging for private conversations, roles, and permission-gated
 
 The first milestone is a closed-alpha desktop messaging vertical slice. Message bodies are end-to-end encrypted; calls, general attachments, and Cipher Pay integration are outside the MVP.
 
-Project docs and diagrams: <https://connorhunter.me/projects/cipher?viewer=docs#project-viewer>
+Project docs and diagrams: <https://connorhunter.me/projects/cipher/docs>
 
 ## Development
 
@@ -26,9 +26,11 @@ Dependabot branches are accepted as `dependabot/*`. These rules apply to new wor
 
 `package.json` is the Cipher release-version source. Run `bun run version:sync` after changing it to update the Cargo workspace, lockfile, internal versioned path dependencies, and Tauri metadata, then run `bun run version:check` before committing.
 
+`bun run release:publish` validates the release metadata and changelog before publishing coverage JSON/PDF and the canonical `CHANGELOG.md` with its PDF.
+
 ## Coverage publication
 
-`bun run coverage:publish` runs the TypeScript and Rust coverage suites, enforcing at least 95% line and function coverage for each independently. It creates one UTC publication timestamp, stamps the overview plus both surface pages, renders matching PDF downloads, and syncs only `projects/cipher/coverage/`. Rust coverage uses the pinned `cargo-llvm-cov` tool and Rust's `llvm-tools-preview` component. Set `ARTIFACTS_BUCKET` for the live artifact bucket, `SOURCE_ARTIFACTS_BUCKET` for a durable copy, and `ARTIFACTS_CLOUDFRONT_DISTRIBUTION_ID` when the published path needs invalidation.
+`bun run coverage:publish` runs the TypeScript and Rust coverage suites, enforcing at least 95% line and function coverage for each independently. It writes one timestamped JSON artifact and one PDF to `projects/cipher/coverage/`; the portfolio renders the JSON itself. Rust coverage uses the pinned `cargo-llvm-cov` tool and Rust's `llvm-tools-preview` component. Set `ARTIFACTS_BUCKET` for the live artifact bucket, `SOURCE_ARTIFACTS_BUCKET` for a durable copy, and `ARTIFACTS_CLOUDFRONT_DISTRIBUTION_ID` when the published path needs invalidation.
 
 ## State-stack configuration
 
@@ -56,7 +58,7 @@ State resources use stable `cipher-production-*` names. The media bucket include
 has no NAT gateway or parallel development, preview, or staging stack. Its
 security groups reserve public TCP 443 for the later load balancer and allow
 the service port only from that boundary. The published
-[Cipher documentation](https://artifacts.connorhunter.me/docs/cipher/index.html)
+[Cipher documentation](https://connorhunter.me/projects/cipher/docs)
 covers its CIDR, cost tags, deletion model, and change-control procedure.
 
 Run `bun --env-file=.env run infra:readiness` before a production change.
@@ -71,7 +73,7 @@ console.
 `CipherProductionRuntime` runs one TLS load balancer plus one Fargate backend
 and realtime gateway task. Before the first deployment, use the guarded
 certificate and bootstrap procedure in the published
-[Cipher documentation](https://artifacts.connorhunter.me/docs/cipher/index.html),
+[Cipher documentation](https://connorhunter.me/projects/cipher/docs),
 then use the protected GitHub workflow for every reviewed production change.
 That documentation records the exact image, health-check, drain, and recovery
 sequence.
