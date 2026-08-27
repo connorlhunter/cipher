@@ -37,8 +37,14 @@ const { router } = await import("../src/routes");
 const { RouteFocusFrame } = await import("../src/app/focus-restoration");
 const { PasswordResetForm, SignInForm, SignUpForm } =
   await import("../src/features/auth/sign-in-form");
-const { AppearanceRoute, ChangelogRoute, DeviceRoute, OverviewRoute, UninstallRoute } =
-  await import("../src/routes");
+const {
+  AppearanceRoute,
+  ChangelogRoute,
+  DeviceRoute,
+  OverviewRoute,
+  RouteErrorFallback,
+  UninstallRoute,
+} = await import("../src/routes");
 
 function shell(boundary: NativeThemeBoundary): JSX.Element {
   return (
@@ -182,6 +188,16 @@ describe("theme preference UI", () => {
 });
 
 describe("desktop shell accessibility", () => {
+  test("keeps route failures focused and free of internal error details", () => {
+    render(<RouteErrorFallback />);
+
+    expect(screen.getByRole("heading", { name: "This view is unavailable" })).toBeDefined();
+    expect(browser.document.activeElement?.tagName).toBe("MAIN");
+    expect(
+      screen.getByText("Return to the overview or restart Cipher and try again."),
+    ).toBeDefined();
+  });
+
   test("keeps landmarks, skip navigation, route focus, and controls keyboard reachable", async () => {
     const boundary: NativeThemeBoundary = {
       current: async () => ({ preference: "system", scheme: "atlas", resolved: "light" }),

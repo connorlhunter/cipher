@@ -74,3 +74,22 @@ test("does not publish when either artifact build fails", async (): Promise<void
   if (failure instanceof Error) expect(failure.message).toBe("changelog build failed");
   expect(events).toEqual(["build-coverage"]);
 });
+
+test("does not invalidate when no distribution is configured", async (): Promise<void> => {
+  const events: string[] = [];
+  await publishReleaseArtifacts({
+    commandRunner: async () => {
+      events.push("command");
+    },
+    dependencies: {
+      buildChangelogArtifact: async () => ({ directory: "", markdown: "", pdf: "" }),
+      prepareCoveragePublication: async () => ({ json: "", pdf: "", updatedAt: "" }),
+      publishChangelog: async () => undefined,
+      publishCoverage: async () => undefined,
+      synchronizeReleaseVersion: () => undefined,
+    },
+    env: {},
+  });
+
+  expect(events).toEqual([]);
+});
