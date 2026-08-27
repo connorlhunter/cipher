@@ -33,6 +33,7 @@ jobs:
               - '.cargo/**'
               - 'package.json'
               - 'bun.lock'
+              - 'vite.config.ts'
               - 'scripts/run-tauri.ts'
               - 'scripts/check-toolchain.ts'
               - 'infra/**'
@@ -59,9 +60,7 @@ jobs:
           CIPHER_PULL_REQUEST_AUTHOR: ${{ github.event.pull_request.user.login }}
           CIPHER_PULL_REQUEST_BODY: ${{ github.event.pull_request.body }}
       - run: bun audit --audit-level=high
-      - run: bun x prettier --check . --ignore-unknown
-      - run: bun x eslint .
-      - run: bun x tsgo --build --pretty false
+      - run: bun run check:frontend
       - run: bun run test:frontend
       - run: bun run web:build
 

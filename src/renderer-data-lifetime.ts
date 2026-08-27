@@ -347,7 +347,7 @@ function isCanonicalUuidV7(value: string): boolean {
     return false;
   }
 
-  for (const [index, character] of [...value].entries()) {
+  for (const [index, character] of Array.from(value).entries()) {
     if ([8, 13, 18, 23].includes(index)) {
       if (character !== "-") {
         return false;
@@ -373,12 +373,19 @@ function requiredDisplayText(value: unknown, maximumBytes: number): string {
     typeof value !== "string" ||
     value.length === 0 ||
     new TextEncoder().encode(value).byteLength > maximumBytes ||
-    /[\u0000-\u001F\u007F]/u.test(value)
+    hasDisplayControlCharacter(value)
   ) {
     throw new Error(invalidRendererViewMessage);
   }
 
   return value;
+}
+
+function hasDisplayControlCharacter(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f);
+  });
 }
 
 function requiredTimestamp(value: unknown): string {

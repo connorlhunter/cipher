@@ -88,7 +88,7 @@ export async function renderCoveragePdfs(
 
 /** Runs PDF rendering and reports a non-sensitive CLI failure. */
 export async function renderCoveragePdfsCli(
-  render: (() => Promise<unknown>) | undefined = undefined,
+  render?: () => Promise<unknown>,
   errorLog: (message: string) => void = console.error,
 ): Promise<boolean> {
   try {

@@ -35,7 +35,7 @@ interface ThemeContextValue {
   preference: DesktopThemePreference;
   resolved: DesktopTheme["resolved"];
   scheme: DesktopTheme["scheme"];
-  select(preference: DesktopThemePreference): Promise<void>;
+  select: (preference: DesktopThemePreference) => Promise<void>;
 }
 
 const fallbackTheme: DesktopTheme = Object.freeze({
@@ -116,7 +116,7 @@ export function ThemeProvider({
       preference: theme.preference,
       resolved: theme.resolved,
       scheme: theme.scheme,
-      async select(preference: DesktopThemePreference): Promise<void> {
+      select: async (preference: DesktopThemePreference): Promise<void> => {
         setPending(true);
         try {
           setTheme(await boundary.set(preference));
