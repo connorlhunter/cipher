@@ -72,9 +72,10 @@ export function ThemeProvider({
     applyDesktopTheme(document.documentElement, theme);
   }, [theme]);
 
+  // The cleanup awaits the subscription promise, including setup that finishes after unmount.
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
     let disposed = false;
-    let stop: (() => void | Promise<void>) | undefined;
 
     const refresh = async (): Promise<void> => {
       try {
@@ -88,24 +89,14 @@ export function ThemeProvider({
       }
     };
 
-    void (async (): Promise<void> => {
-      await refresh();
-      if (disposed) {
-        return;
-      }
-
-      try {
-        stop = await boundary.subscribe(refresh);
-      } catch {
-        // The current theme remains usable when an older desktop core has no notification.
-      }
-    })();
+    const subscription = refresh()
+      .then(() => (disposed ? undefined : boundary.subscribe(refresh)))
+      .catch(() => undefined);
 
     return () => {
       disposed = true;
-      if (stop !== undefined) {
-        void stop();
-      }
+      // Subscription setup may finish after unmount; its disposer still belongs to this effect.
+      void subscription.then((stop) => stop?.()).catch(() => undefined);
     };
   }, [boundary]);
 

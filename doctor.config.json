@@ -1,0 +1,18 @@
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  "scope": "full",
+  "blocking": "error",
+  "ignore": {
+    "files": [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/coverage/**",
+      "**/changelog/**",
+      ".codeql/**",
+      ".cache/**",
+      "**/target/**",
+      "**/cdk.out/**",
+      "**/routeTree.gen.ts"
+    ]
+  }
+}
