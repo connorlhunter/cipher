@@ -31,7 +31,7 @@
     "desktop:build:debug": "bun scripts/run-tauri.ts build --debug --bundles app",
     "desktop:dev": "bun scripts/run-tauri.ts dev",
     "check": "bun run check:frontend && cargo fmt --check && cargo clippy --workspace --all-targets -- -D warnings && npm --prefix infra run typecheck",
-    "check:frontend": "vp check",
+    "check:frontend": "vp check && bun run doctor",
     "format": "vp fmt && cargo fmt",
     "format:check": "vp fmt --check && cargo fmt --check",
     "infra:install": "npm --prefix infra ci",
@@ -58,7 +58,8 @@
     "version:sync": "bun scripts/release-version.ts",
     "verify": "bun run naming:check && bun run version:check && bun run toolchain:check && bun run audit && bun run check && bun run test && bun run web:build && bun run codeql:scan",
     "web:build": "vp build",
-    "web:dev": "vp dev"
+    "web:dev": "vp dev",
+    "doctor": "react-doctor . --yes --no-telemetry --no-supply-chain"
   },
   "dependencies": {
     "@tanstack/react-form": "^1.33.5",
@@ -87,6 +88,7 @@
     "@vitejs/plugin-react": "^6.0.5",
     "happy-dom": "^20.11.2",
     "pdfkit": "^0.19.1",
+    "react-doctor": "0.9.12",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
     "vite": "npm:@voidzero-dev/vite-plus-core@0.2.9",
