@@ -63,6 +63,32 @@ afterEach(() => {
 });
 
 describe("theme preference UI", () => {
+  test("disposes a native theme subscription that finishes after unmount", async () => {
+    let completeSubscription: ((stop: () => void) => void) | undefined;
+    let stopped = 0;
+    const boundary: NativeThemeBoundary = {
+      current: async () => ({ preference: "system", scheme: "atlas", resolved: "light" }),
+      set: async () => ({ preference: "system", scheme: "atlas", resolved: "light" }),
+      subscribe: () =>
+        new Promise((resolve) => {
+          completeSubscription = resolve;
+        }),
+    };
+    const view = render(shell(boundary));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(completeSubscription).toBeDefined();
+    view.unmount();
+    await act(async () => {
+      completeSubscription?.(() => {
+        stopped += 1;
+      });
+      await Promise.resolve();
+    });
+    expect(stopped).toBe(1);
+  });
+
   test("selects and cycles native schemes without browser persistence", async () => {
     const selected: string[] = [];
     const boundary: NativeThemeBoundary = {
