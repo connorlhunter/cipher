@@ -77,3 +77,5 @@ certificate and bootstrap procedure in the published
 then use the protected GitHub workflow for every reviewed production change.
 That documentation records the exact image, health-check, drain, and recovery
 sequence.
+
+React Doctor runs during `bun run verify` and in GitHub CI. Use `bun run doctor` for a standalone scan or `bun run doctor -- --verbose` for every finding. The pinned CLI scans the full React project, blocks errors, and reports warnings. Generated files are excluded in `doctor.config.json`; telemetry, remote scoring, and Socket.dev checks are disabled. Dependency auditing remains in `bun run audit`.
