@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.0-prealpha.12] - 2026-09-09
+
+### Added
+
+- Run React Doctor as part of frontend verification locally and in GitHub CI.
+
+### Fixed
+
+- Dispose native theme subscriptions when setup completes after the provider unmounts.
+- Use one SHA-2 dependency for native authentication and credential storage.
+- Check out source before filtering changes in main-branch CI.
+- Keep the Vite core alias aligned with Vite+.
+
+### Changed
+
+- Update frontend tooling, native dependencies, infrastructure dependencies, and CI actions.
+
+### Known limits
+
+- OpenMLS messaging, conversation APIs, durable delivery, and encrypted media remain incomplete.
+
 ## [0.1.0-prealpha.11] - 2026-08-27
 
 ### Fixed
