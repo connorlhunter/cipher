@@ -67,7 +67,7 @@ function createFileSystem(findings: Partial<Record<string, number>> = {}): {
 
 describe("local CodeQL scan", () => {
   test("pins the required CodeQL CLI exactly", () => {
-    expect(requiredToolchains.codeql).toBe("2.26.3");
+    expect(requiredToolchains.codeql).toBe("2.27.0");
   });
 
   test("defers to hosted CodeQL on GitHub Actions without invoking the CLI", () => {
@@ -109,7 +109,7 @@ describe("local CodeQL scan", () => {
     const mismatched = createRunner({ version: "2.26.2" });
     expect(() =>
       runCodeqlScan({ repositoryRoot: root }, mismatched.runner, fileSystem, () => undefined),
-    ).toThrow("CodeQL CLI 2.26.3 is required; found 2.26.2");
+    ).toThrow("CodeQL CLI 2.27.0 is required; found 2.26.2");
   });
 
   test("uses literal CodeQL commands, repository output, bundled suites, and local threats", () => {
@@ -258,6 +258,98 @@ describe("local CodeQL scan", () => {
 });
 
 describe("SARIF result counting", () => {
+  test("rejects incomplete Rust extraction even with zero alerts", () => {
+    for (const id of [
+      "rust/diagnostics/extraction-errors",
+      "rust/diagnostics/extraction-warnings",
+    ]) {
+      expect(() =>
+        sarifResultCount({
+          runs: [
+            {
+              results: [],
+              invocations: [
+                {
+                  executionSuccessful: true,
+                  toolExecutionNotifications: [
+                    {
+                      descriptor: { id },
+                      message: { text: "macro expansion failed for 'assert_eq'" },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      ).toThrow("CodeQL extraction is incomplete");
+    }
+  });
+
+  test("rejects failed invocations and execution errors", () => {
+    expect(() =>
+      sarifResultCount({ runs: [{ invocations: [{ executionSuccessful: false }] }] }),
+    ).toThrow("CodeQL analysis did not complete successfully");
+    expect(() =>
+      sarifResultCount({
+        runs: [{ invocations: [{ toolExecutionNotifications: [{ level: "error" }] }] }],
+      }),
+    ).toThrow("CodeQL extraction is incomplete");
+  });
+
+  test("accepts informational diagnostics and rejects malformed diagnostics", () => {
+    expect(
+      sarifResultCount({
+        runs: [
+          {
+            invocations: [
+              {
+                executionSuccessful: true,
+                toolExecutionNotifications: [
+                  { level: "note", descriptor: { id: "rust/diagnostics/cfg-consistency-counts" } },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe(0);
+    for (const message of [
+      undefined,
+      null,
+      {},
+      { text: 1 },
+      { text: "macro expansion failed for '__cmd__desktop_theme'" },
+    ]) {
+      expect(
+        sarifResultCount({
+          runs: [
+            {
+              invocations: [
+                {
+                  toolExecutionNotifications: [
+                    {
+                      descriptor: { id: "rust/diagnostics/extraction-warnings" },
+                      message,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      ).toBe(0);
+    }
+    for (const invocations of [
+      "invalid",
+      [null],
+      [{ toolExecutionNotifications: "invalid" }],
+      [{ toolExecutionNotifications: [null] }],
+    ]) {
+      expect(() => sarifResultCount({ runs: [{ invocations }] })).toThrow("invalid SARIF");
+    }
+  });
+
   test("counts results across runs and accepts an omitted results collection", () => {
     expect(
       sarifResultCount({

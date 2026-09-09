@@ -1038,7 +1038,7 @@ mod tests {
             assert_eq!(
                 gate.authorize(identity()),
                 Err(AuthenticationError::Revoked),
-                "{user_id}/{device_id}/{session_id}"
+                "invalid principal identifiers must be rejected"
             );
         }
 

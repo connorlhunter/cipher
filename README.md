@@ -10,6 +10,8 @@ Project docs and diagrams: <https://connorhunter.me/projects/cipher/docs>
 
 Run `bun run verify` before committing or pushing. Web formatting, linting, type checks, builds, and local development use Vite+ through the `bun run` commands. Use `bun run check:frontend` for the web-only gate or `bun run check` to include Rust and infrastructure checks. The local gate requires the pinned CodeQL CLI as the literal `codeql` executable on `PATH`; `bun run codeql:scan` scans JavaScript/TypeScript, Rust, and GitHub Actions and keeps its ignored database, cache, and SARIF output under `.codeql/`.
 
+CodeQL must match `toolchain.codeql` in `package.json`. Use the complete [CodeQL bundle](https://github.com/github/codeql-action/releases), which includes the matching extractor and query packs. The local gate rejects alerts, failed analysis, extraction errors, and unresolved standard logging or assertion macros. Other extractor diagnostics remain visible in the scan output. GitHub's default setup updates independently, so compare its analyzer version and open alerts when preparing a release; a successful analysis job does not mean existing alerts are fixed.
+
 Branches use `<type>/<kebab-case-name>` and commits use `<type>[(scope)][!]: <imperative summary>`, where `<type>` is `feat`, `fix`, `chore`, `docs`, `test`, or `refactor`. Issue and pull request subjects use the same commit format; the issue forms supply the appropriate prefix.
 
 Release branches use `release/<version>`, release-preparation commits use `chore(release): prepare <version>`, and release tags use `v<version>`.
