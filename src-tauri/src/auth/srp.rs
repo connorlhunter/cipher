@@ -4,7 +4,7 @@ use std::{collections::HashMap, fmt};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use hmac::{Hmac, KeyInit, Mac};
-use sha2_next::{Digest, Sha256};
+use sha2::{Digest, Sha256};
 use srp::{
     Client, EphemeralSecret, Generate, Group,
     bigint::{
