@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.0-prealpha.13] - 2026-09-09
+
+### Fixed
+
+- Remove principal identifiers from an authentication test failure message.
+- Reject incomplete CodeQL extraction of standard logging and assertion macros.
+
+### Changed
+
+- Update the pinned CodeQL bundle to 2.27.0.
+
 ## [0.1.0-prealpha.12] - 2026-09-09
 
 ### Added
