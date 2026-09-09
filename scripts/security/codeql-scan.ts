@@ -160,6 +160,7 @@ export function sarifResultCount(sarif: unknown): number {
     if (typeof run !== "object" || run === null) {
       throw new Error("CodeQL produced invalid SARIF: a run is not an object.");
     }
+    assertCompleteExtraction(run);
     if (!("results" in run) || run.results === undefined) {
       continue;
     }
@@ -169,6 +170,58 @@ export function sarifResultCount(sarif: unknown): number {
     count += run.results.length;
   }
   return count;
+}
+
+/** Rejects failed or incomplete extraction even when no query produced an alert. */
+function assertCompleteExtraction(run: object): void {
+  if (!("invocations" in run)) return;
+  if (!Array.isArray(run.invocations)) {
+    throw new Error("CodeQL produced invalid SARIF: invocations are not an array.");
+  }
+  for (const invocation of run.invocations) {
+    if (typeof invocation !== "object" || invocation === null) {
+      throw new Error("CodeQL produced invalid SARIF: an invocation is not an object.");
+    }
+    if (invocation.executionSuccessful === false) {
+      throw new Error("CodeQL analysis did not complete successfully.");
+    }
+    assertCompleteDiagnostics(invocation.toolExecutionNotifications);
+  }
+}
+
+/** Standard diagnostic macros must resolve for logging and assertion analysis. */
+function unresolvedDiagnosticMacro(notification: Record<string, unknown>): boolean {
+  const message = notification.message;
+  if (typeof message !== "object" || message === null || !("text" in message)) return false;
+  return (
+    typeof message.text === "string" &&
+    /macro expansion failed for '(?:assert(?:_eq|_ne)?|debug_assert(?:_eq|_ne)?|format(?:_args)?|e?print(?:ln)?|panic|dbg)'/u.test(
+      message.text,
+    )
+  );
+}
+
+/** Rejects extraction errors and gaps in standard logging or assertion analysis. */
+function assertCompleteDiagnostics(notifications: unknown): void {
+  if (notifications === undefined) return;
+  if (!Array.isArray(notifications)) {
+    throw new Error("CodeQL produced invalid SARIF: notifications are not an array.");
+  }
+  for (const notification of notifications) {
+    if (typeof notification !== "object" || notification === null) {
+      throw new Error("CodeQL produced invalid SARIF: a notification is not an object.");
+    }
+    const id: unknown = notification.descriptor?.id;
+    if (
+      notification.level === "error" ||
+      id === "rust/diagnostics/extraction-errors" ||
+      (id === "rust/diagnostics/extraction-warnings" && unresolvedDiagnosticMacro(notification))
+    ) {
+      throw new Error(
+        "CodeQL extraction is incomplete. Review .codeql/results diagnostics and repair the extractor or toolchain before accepting the scan.",
+      );
+    }
+  }
 }
 
 /**

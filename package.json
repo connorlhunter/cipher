@@ -12,7 +12,7 @@
   },
   "toolchain": {
     "cargoLlvmCov": "0.8.7",
-    "codeql": "2.26.3"
+    "codeql": "2.27.0"
   },
   "scripts": {
     "audit": "bun audit --audit-level=high && cargo deny check",
