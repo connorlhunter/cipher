@@ -13,10 +13,10 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "devDependencies": {
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.5.0",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "aws-cdk": "^2.1139.0",
-    "aws-cdk-lib": "^2.267.0",
+    "aws-cdk": "^2.1140.0",
+    "aws-cdk-lib": "^2.268.0",
     "constructs": "^10.8.1",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3"
